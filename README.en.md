@@ -157,14 +157,14 @@ Click an image to view it at full size.
 
 ## Download
 
-**3.3.2 installation notes (release preparation).** Close ArguMesh before installing over your current version; the installer does not overwrite an existing database or saved AI settings. Export a workspace backup before upgrading. The desktop app checks GitHub for stable releases at startup, shows a dismissible download notice, and offers **Settings → 应用更新 → 检查更新**. This optional check sends no research content; failed checks do not block use. v3.2.5 has no in-app checker, so please upgrade once manually. Private Node / Python / MinerU runtimes and required Windows C++ libraries are included. The first precise translation downloads about 2.5 GB of parsing models with progress, cancellation and retry; subsequent runs and upgrades reuse them.
+**3.3.2 installation notes.** Close ArguMesh before installing over your current version; the installer does not overwrite an existing database or saved AI settings. Export a workspace backup before upgrading. The desktop app checks GitHub for stable releases at startup, shows a dismissible download notice, and offers **Settings → 应用更新 → 检查更新**. This optional check sends no research content; failed checks do not block use. v3.2.5 has no in-app checker, so please upgrade once manually. Private Node / Python / MinerU runtimes and required Windows C++ libraries are included. The first precise translation downloads about 2.5 GB of parsing models with progress, cancellation and retry; subsequent runs and upgrades reuse them.
 
-The 3.3.2 release is being prepared: the Windows EXE is rebuilt, and the Mac DMG needs its internal version updated. The current public installer remains on the [v3.3.1 Release](https://github.com/Fyuan0206/ArguMesh/releases/tag/v3.3.1). The 3.3.2 draft assets will be made public after both platforms pass verification:
+Windows x64 and Apple Silicon Mac installers are published on the [v3.3.2 Release](https://github.com/Fyuan0206/ArguMesh/releases/tag/v3.3.2), with SHA-256 checksum files:
 
 | File | For |
 | --- | --- |
-| [`ArguMesh_3.3.2_x64-setup.exe`](https://github.com/Fyuan0206/ArguMesh/releases/tag/v3.3.2) | Windows 10/11 x64; `currentUser` install (no administrator rights) |
-| `ArguMesh_3.3.2_aarch64.dmg` (rebuild pending) | macOS Apple Silicon (M series); not for Intel Macs |
+| [`ArguMesh_3.3.2_x64-setup.exe`](https://github.com/Fyuan0206/ArguMesh/releases/download/v3.3.2/ArguMesh_3.3.2_x64-setup.exe) | Windows 10/11 x64; `currentUser` install (no administrator rights) |
+| [`ArguMesh_3.3.2_aarch64.dmg`](https://github.com/Fyuan0206/ArguMesh/releases/download/v3.3.2/ArguMesh_3.3.2_aarch64.dmg) | macOS Apple Silicon (M series); not for Intel Macs |
 
 **Known shared-data limitations:** keeping the web and desktop entry points open together can overwrite workspace changes. An existing shared workspace can replace browser-only Paper Cards; export a backup and use one entry point at a time. Legacy source-run databases at `./data/argumesh.db` are not automatically moved to the user directory; keep `DATABASE_URL=file:./data/argumesh.db` explicitly set until migration is arranged.
 
@@ -188,7 +188,7 @@ Troubleshooting entry point: `%LOCALAPPDATA%\ArguMesh\sidecar.log` — it record
 
 ### Not on Windows?
 
-On an **Apple Silicon Mac**, once the rebuilt DMG is uploaded, download it from the release, open it, drag `ArguMesh.app` into Applications, then launch it from there. The Mac bundle includes private Node, Python and MinerU runtimes; parsing models download on first precise translation. Data is stored under `~/Library/Application Support/ArguMesh`, including the database, workspace file and reading cache (OCR text and translations), which remain readable after desktop restarts on a new port. The Mac build has no Apple Developer signature or notarization, so you must approve its first launch in macOS. The supplied file is named 3.3.2, but its app metadata and bundled server report 3.3.1; it has not been uploaded as a 3.3.2 installer and needs rebuilding on a Mac. Source-build instructions are in [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) §3.
+On an **Apple Silicon Mac**, download the DMG from the release, open it, drag `ArguMesh.app` into Applications, then launch it from there. The Mac bundle includes private Node, Python and MinerU runtimes; parsing models download on first precise translation. Data is stored under `~/Library/Application Support/ArguMesh`, including the database, workspace file and reading cache (OCR text and translations), which remain readable after desktop restarts on a new port. The Mac build has no Apple Developer signature or notarization, so you must approve its first launch in macOS. The new DMG app metadata and bundled server both report 3.3.2. Archive integrity and the empty database template passed inspection; no macOS launch test was performed in this task. Source-build instructions are in [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) §3.
 
 On other platforms, run it from source — see [Deployment](#deployment) below (`pnpm install` → `pnpm run db:seed` → `pnpm run dev`), or paste the [Deploy with AI](#deploy-with-ai) prompt into a coding agent.
 

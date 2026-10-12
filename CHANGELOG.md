@@ -8,10 +8,10 @@ ArguMesh（论脉）的版本历史。README 只保留指向本文件的入口�
 
 ---
 
-## Unreleased — v3.3.2 (2026-10-12), desktop installer preparation
+## v3.3.2 (2026-10-12) — Windows and Apple Silicon Mac installers
 
-- Set the package, Tauri bundle, and Cargo version to 3.3.2. Rebuild the Windows x64 EXE with a SHA-256 checksum. The supplied macOS Apple Silicon DMG reports 3.3.1 internally and must be rebuilt before the dual-platform release is published. No new database schema migration.
-- 统一 package、Tauri 与 Cargo 版本号为 3.3.2，重新构建 Windows x64 EXE 并生成 SHA-256 校验文件；提供的 Mac DMG 内部仍为 3.3.1，待重新构建后再公开双平台 Release；无新增数据库结构迁移。
+- Set the package, Tauri bundle, and Cargo version to 3.3.2. Published the rebuilt Windows x64 EXE and the updated Apple Silicon Mac DMG with SHA-256 checksums. Both the Mac app metadata and bundled server report 3.3.2; archive integrity and its empty database template passed inspection. No new database schema migration.
+- 统一 package、Tauri 与 Cargo 版本号为 3.3.2，发布重新构建的 Windows x64 EXE 与更新后的 Apple Silicon Mac DMG，附 SHA-256 校验文件；Mac 应用元数据与内置服务均为 3.3.2，归档完整性和空模板库核验通过；无新增数据库结构迁移。
 - Known limitations: shared workspace snapshots can overwrite changes when multiple entry points stay open, and loading an existing shared workspace can replace browser-only Paper Cards. Back up the workspace and use one entry point at a time. Existing source-run databases at `./data/argumesh.db` are not automatically moved to the new default directory; retain an explicit `DATABASE_URL` until data migration is arranged. The Mac DMG is inspected on Windows, without a macOS launch test.
 - 已知限制：多个入口同时打开时，共享工作区快照可能覆盖另一入口的修改；已有共享工作区可能替换浏览器独有的 Paper Card。请备份工作区并一次只使用一个入口。源码旧库 `./data/argumesh.db` 不会自动迁入新默认目录，迁移前请显式保留 `DATABASE_URL`。Mac DMG 在 Windows 上核验，未在本次任务中实机启动。
 

@@ -154,14 +154,14 @@ API:`POST /api/projects/:projectId/library/scan-inbox`(需已设置 `workspacePa
 
 ## 下载安装
 
-3.3.2 双平台发布正在准备，Windows EXE 已重新构建，Mac DMG 等待内部版本更新。正式安装包仍见 [v3.3.1 Release](https://github.com/Fyuan0206/ArguMesh/releases/tag/v3.3.1)；3.3.2 草稿附件待两平台核验完成后公开。
+3.3.2 已发布 Windows x64 EXE 与 Apple Silicon Mac DMG，安装包及 SHA-256 校验文件见 [v3.3.2 Release](https://github.com/Fyuan0206/ArguMesh/releases/tag/v3.3.2)。
 
 | 文件 | 适用 |
 | --- | --- |
-| [`ArguMesh_3.3.2_x64-setup.exe`](https://github.com/Fyuan0206/ArguMesh/releases/tag/v3.3.2) | Windows 10/11 x64，`currentUser` 安装，**不需要管理员权限** |
-| `ArguMesh_3.3.2_aarch64.dmg`（待重新构建） | macOS Apple Silicon（M 系列）；不适用于 Intel Mac |
+| [`ArguMesh_3.3.2_x64-setup.exe`](https://github.com/Fyuan0206/ArguMesh/releases/download/v3.3.2/ArguMesh_3.3.2_x64-setup.exe) | Windows 10/11 x64，`currentUser` 安装，**不需要管理员权限** |
+| [`ArguMesh_3.3.2_aarch64.dmg`](https://github.com/Fyuan0206/ArguMesh/releases/download/v3.3.2/ArguMesh_3.3.2_aarch64.dmg) | macOS Apple Silicon（M 系列）；不适用于 Intel Mac |
 
-**3.3.2 安装说明（发布准备中）：** 关闭 ArguMesh 后覆盖安装；已有数据库与已保存的 AI 配置不会被安装器覆盖。升级前请导出工作区备份。桌面版启动时查询 GitHub 最新正式版，提供可关闭的下载提醒；也可在 **设置 → 应用更新 → 检查更新** 手动检查。检查不发送研究内容，网络失败不影响使用。v3.2.5 没有应用内检查功能，请先手动更新一次。新版内置独立 Node / Python / MinerU 与 Windows 所需 C++ 运行库；首次精确翻译自动下载约 2.5 GB 的解析模型，可取消与重试，升级后复用。
+**3.3.2 安装说明：** 关闭 ArguMesh 后覆盖安装；已有数据库与已保存的 AI 配置不会被安装器覆盖。升级前请导出工作区备份。桌面版启动时查询 GitHub 最新正式版，提供可关闭的下载提醒；也可在 **设置 → 应用更新 → 检查更新** 手动检查。检查不发送研究内容，网络失败不影响使用。v3.2.5 没有应用内检查功能，请先手动更新一次。新版内置独立 Node / Python / MinerU 与 Windows 所需 C++ 运行库；首次精确翻译自动下载约 2.5 GB 的解析模型，可取消与重试，升级后复用。
 
 **共享数据已知限制：** 同时打开网页端与客户端可能互相覆盖工作区修改；已有共享文件可能替换浏览器独有的 Paper Card，请先导出备份并一次只使用一个入口。源码旧库 `./data/argumesh.db` 不会自动迁移到用户目录；迁移前请显式设置 `DATABASE_URL=file:./data/argumesh.db`。
 
@@ -185,7 +185,7 @@ API:`POST /api/projects/:projectId/library/scan-inbox`(需已设置 `workspacePa
 
 ### 不用 Windows?
 
-**Apple Silicon Mac** 待正确版本的 DMG 上传后，下载 Release 中的 `.dmg`，打开后将 `ArguMesh.app` 拖入 Applications，再从应用程序目录启动。Mac 包内含独立 Node、Python 与 MinerU；首次精确解析仍需下载模型。数据存放在 `~/Library/Application Support/ArguMesh`，包括数据库、工作区文件及阅读缓存（OCR 文本与译文）；重启换端口后可继续读取。Mac 包未进行 Apple 开发者签名或公证，首次启动需在 macOS 中手动确认。本次提供的 DMG 文件名为 3.3.2，但内部应用与服务版本均为 3.3.1，尚未作为 3.3.2 上传；需要在 Mac 上重新构建。源码构建步骤见 [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) 第 3 节。
+**Apple Silicon Mac** 下载 Release 中的 `.dmg`，打开后将 `ArguMesh.app` 拖入 Applications，再从应用程序目录启动。Mac 包内含独立 Node、Python 与 MinerU；首次精确解析仍需下载模型。数据存放在 `~/Library/Application Support/ArguMesh`，包括数据库、工作区文件及阅读缓存（OCR 文本与译文）；重启换端口后可继续读取。Mac 包未进行 Apple 开发者签名或公证，首次启动需在 macOS 中手动确认。新 DMG 的内部应用与服务版本均已核验为 3.3.2，归档完整性检查通过，模板库无业务数据；本次任务未在 Mac 实机启动验证。源码构建步骤见 [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) 第 3 节。
 
 其他平台可从源码跑——见下方[部署](#部署)(`pnpm install` → `pnpm run db:seed` → `pnpm run dev`),或把[让 AI 部署](#让-ai-部署)的提示词发给编程助手。
 
