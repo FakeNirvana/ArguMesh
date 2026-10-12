@@ -22,6 +22,14 @@ const createMatrixSchema = z.object({
 
 export const matrixRoutes = new Hono<AppEnv>();
 
+matrixRoutes.get("/matrices", async (c) => {
+  const rows = await createDatabase(c.env).select({
+    id: matrices.id, projectId: matrices.projectId, name: matrices.name,
+    description: matrices.description, createdAt: matrices.createdAt,
+  }).from(matrices).orderBy(asc(matrices.createdAt));
+  return c.json({ matrices: rows });
+});
+
 matrixRoutes.put("/matrices/:matrixId", async (c) => {
   const parsed = createMatrixSchema.safeParse({ ...await c.req.json().catch(() => null), id: c.req.param("matrixId") });
   if (!parsed.success) return c.json({ error: "INVALID_MATRIX", message: "矩阵信息不完整", issues: parsed.error.issues }, 400);

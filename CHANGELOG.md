@@ -8,6 +8,13 @@ ArguMesh（论脉）的版本历史。README 只保留指向本文件的入口�
 
 ---
 
+## Unreleased — macOS Apple Silicon desktop build
+
+- Fixed local workspace data disappearing from the UI when the desktop sidecar restarted on a new port. The Mac app and locally started web server now use the same application data directory and shared workspace file; persisted matrices are also restored from the database.
+- 修复桌面服务换端口后 Paper Card 与矩阵等本地状态在界面中消失的问题。Mac 客户端与本机启动的网页端共用应用数据目录和工作区文件，已有矩阵也会从数据库恢复。
+- Added a local macOS arm64 DMG build using the existing Tauri desktop shell, with bundled Node, libSQL, and a hash-locked private Python/MinerU runtime. The app stores its database and parser models under `~/Library/Application Support/ArguMesh`; existing Windows packaging remains available. Desktop HTTP now binds explicitly to `127.0.0.1`, and Mac update checks select a matching DMG asset when one is published.
+- 新增 Apple Silicon Mac 本地 DMG 构建：沿用 Tauri 桌面壳，随包提供 Node、libSQL、独立 Python/MinerU；数据库与解析模型保存在 `~/Library/Application Support/ArguMesh`。保留 Windows 打包流程，桌面 HTTP 明确只监听 `127.0.0.1`；将来发布 Mac 包后，应用更新检查会选择对应 DMG。本地验证版尚未签名、公证或上传 Releases。
+
 ## Docs (2026-10-07) — Homepage content corrections
 
 - Restored the reproduced reading status, clarified desktop-specific host features, split the reader description, and distinguished published v3.3.0 downloads from unreleased v3.3.1 source changes.

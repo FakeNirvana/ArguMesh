@@ -1,8 +1,8 @@
 import "dotenv/config";
 import { createClient } from "@libsql/client";
 import { createHash } from "node:crypto";
-import { mkdirSync } from "node:fs";
 import { readFile } from "node:fs/promises";
+import { loadBindings } from "../server/env";
 
 /**
  * 全新安装入口:建表(IF NOT EXISTS)+ 演示项目(单用户本地版,无账户)。
@@ -10,10 +10,8 @@ import { readFile } from "node:fs/promises";
  * 所有迁移文件会在 __drizzle_migrations 登记为已应用,后续 schema 升级用 db:migrate。
  */
 
-const url = process.env.DATABASE_URL ?? "file:./data/argumesh.db";
+const url = loadBindings().DATABASE_URL;
 const authToken = process.env.DATABASE_AUTH_TOKEN;
-// 本地文件库:确保 data/ 目录存在(libsql 不会自动建目录)。
-mkdirSync("data", { recursive: true });
 
 const client = createClient({ url, authToken });
 

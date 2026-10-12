@@ -17,10 +17,14 @@ export function mineruDataDirectory(): string {
   return process.env.ARGUMESH_DATA_DIR ? resolve(process.env.ARGUMESH_DATA_DIR, "data") : resolve("data");
 }
 
+export function portablePythonExecutable(directory: string, platform = process.platform): string {
+  return platform === "win32" ? join(directory, "python.exe") : join(directory, "bin", "python3.13");
+}
+
 export function resolveMineruRuntime(): string | null {
   const configured = process.env.ARGUMESH_MINERU_RUNTIME;
   const directory = configured ? resolve(configured) : resolve("build", "mineru-runtime");
-  if (existsSync(join(directory, "python.exe")) && existsSync(join(directory, "runner.py")) && existsSync(join(directory, "runtime.json"))) return directory;
+  if (existsSync(portablePythonExecutable(directory)) && existsSync(join(directory, "runner.py")) && existsSync(join(directory, "runtime.json"))) return directory;
   if (configured || process.env.ARGUMESH_DESKTOP === "1") throw new Error("安装包中的解析环境不完整，请重新下载安装 ArguMesh。");
   return null;
 }
@@ -89,7 +93,7 @@ export async function runMineruCommand(args: string[], signal: AbortSignal, prog
   const env: NodeJS.ProcessEnv = { ...process.env, HF_HOME: join(models, "huggingface"), MODELSCOPE_CACHE: join(models, "modelscope"), MINERU_TOOLS_CONFIG_JSON: join(models, "mineru.json"), MINERU_DEVICE_MODE: "cpu", PYTHONUTF8: "1", PYTHONUNBUFFERED: "1", PYTHONDONTWRITEBYTECODE: "1", MINERU_MODEL_SOURCE: "modelscope" };
   // Parser children do not need the application's AI credentials.
   for (const key of Object.keys(env)) if (/API_KEY|AUTH_TOKEN|AI_PROVIDERS/.test(key)) delete env[key];
-  const python = join(runtime, "python.exe");
+  const python = portablePythonExecutable(runtime);
   const runner = join(runtime, "runner.py");
   const identity = `${runtime}\n${models}`;
   if (preparedRuntime !== identity) {

@@ -21,6 +21,8 @@ pnpm run build
 pnpm start          # http://127.0.0.1:8787
 ```
 
+本机网页端与同一系统用户安装的桌面客户端共用数据目录：macOS 为 `~/Library/Application Support/ArguMesh`，Windows 为 `%LOCALAPPDATA%\ArguMesh`，Linux 为 `$XDG_DATA_HOME/ArguMesh`（未设置时为 `~/.local/share/ArguMesh`）。数据库在 `data/argumesh.db`，Paper Card、矩阵列表及其他浏览器工作区状态保存在 `workspace.json`。首次从源码启动且尚未安装客户端时，先运行 `pnpm run db:seed`；已有数据库时可按需运行 `pnpm run db:migrate`。`ARGUMESH_DATA_DIR` 可显式覆盖数据目录，`DATABASE_URL` 可单独覆盖数据库位置；若只覆盖后者，两端将不再共用同一个数据库。
+
 `.env` 可选，全部配置见 [`DEVELOPMENT.md`](DEVELOPMENT.md) 的环境变量表。
 
 > ⚠ 默认只听 localhost 且**无鉴权**。不要把 API 端口暴露到不可信网络。公网部署必须自己加网络限制和 HTTPS 反代（如 Caddy / Nginx）。
@@ -121,6 +123,24 @@ pnpm tauri build
 ```
 
 产物：`src-tauri/target/release/bundle/nsis/ArguMesh_<version>_x64-setup.exe`
+
+#### macOS Apple Silicon（本地验证版）
+
+macOS 使用同一份前端、Hono sidecar 和 Tauri 壳，生成供 Finder 安装的 `.dmg`。构建机需要 Apple Silicon Mac、Xcode Command Line Tools、Node.js ≥ 20、pnpm、uv 和 Rust。Mac 版 Python 3.13.14 与 MinerU 3.4.2 运行时在构建时随包安装，依赖由 `scripts/mineru/requirements-macos-arm64.lock` 固定并校验哈希；模型和用户配置不进安装包。
+
+```bash
+pnpm install
+pnpm run build:mineru:mac
+pnpm run build
+pnpm run build:sidecar -- --node-exe "$(node -p process.execPath)"
+pnpm tauri build
+```
+
+Tauri 自动合并 `src-tauri/tauri.macos.conf.json`，目标为 DMG。产物在 `src-tauri/target/release/bundle/dmg/`，可直接检查的应用在 `src-tauri/target/release/bundle/macos/ArguMesh.app`。本机构建**未签名、未公证**，首次启动需用户在 macOS 中手动确认；目前没有上传到 GitHub Releases。此命令只适用于 arm64，不生成 Intel Mac 包。
+
+若构建只生成 `.app`，但 Finder 排版 AppleScript 导致 DMG 步骤失败，可在 `src-tauri/target/release/bundle/macos/` 下用已生成的 `../dmg/bundle_dmg.sh` 加 `--skip-jenkins` 重新制作 DMG。该选项只跳过窗口图标位置与背景排版，保留应用和 Applications 快捷入口；先卸载失败构建留下的临时磁盘映像。此构建环境曾遇到该问题。
+
+Mac 首次启动在 `~/Library/Application Support/ArguMesh/data/argumesh.db` 写入空库；已有库不会覆盖。`sidecar.log` 在同一 `ArguMesh` 目录。精确解析首次使用下载模型到用户数据目录；翻译仍调用用户设置的模型 API。数据库、PDF、模型与 API Key 均不随安装包分发。验证时先检查项目读写、PDF 阅读和 AI 配置，再按需检查精确解析的模型下载与翻译。
 
 内置 CPU 解析环境后安装包与安装占用会明显增大；模型不进入安装包，首次使用另行下载。`src-tauri/target/` 全量构建约 2 GB（已 gitignore，别提交）。安装模式 `currentUser`，**不需要管理员权限**；安装器语言 English + SimpChinese。
 

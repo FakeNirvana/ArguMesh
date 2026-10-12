@@ -16,7 +16,7 @@ root.use("/api/*", async (c) => app.fetch(c.req.raw, bindings));
 root.use("*", serveStatic({ root: "./dist" }));
 root.use("*", serveStatic({ path: "./dist/index.html" }));
 
-serve({ fetch: root.fetch, port }, (info) => {
+serve({ fetch: root.fetch, port, hostname: "127.0.0.1" }, (info) => {
   console.log(`ArguMesh API 服务已启动: http://127.0.0.1:${info.port}`);
   // 桌面壳(src-tauri)用 PORT=0 让系统分配端口来避开冲突,再解析这一行拿真实端口。
   // 改格式前先看 src-tauri/src/main.rs 的 read_sidecar_port()。

@@ -21,6 +21,7 @@ import { evidenceLayerRoutes } from "./routes/evidenceLayers";
 import { systemRoutes } from "./routes/system";
 import { conversationRoutes } from "./routes/conversations";
 import { writingRoutes } from "./routes/writing";
+import { workspaceRoutes } from "./routes/workspace";
 import { getAiProviders } from "./services/ai";
 import { isWebSearchConfigured } from "./services/web-search";
 import type { AppEnv } from "./types";
@@ -63,6 +64,7 @@ app.route("/api", evidenceLayerRoutes);
 app.route("/api", systemRoutes);
 app.route("/api", conversationRoutes);
 app.route("/api", writingRoutes);
+app.route("/api", workspaceRoutes);
 
 app.notFound((c) => c.json({ error: "NOT_FOUND", message: "接口不存在" }, 404));
 app.onError((error, c) => {

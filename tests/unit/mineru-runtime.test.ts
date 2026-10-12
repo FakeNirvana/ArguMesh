@@ -1,11 +1,15 @@
 // @vitest-environment node
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { join, resolve } from "node:path";
-import { mineruDataDirectory, parseMineruProgress, resolveMineruRuntime } from "../../server/services/mineru-runtime";
+import { mineruDataDirectory, parseMineruProgress, portablePythonExecutable, resolveMineruRuntime } from "../../server/services/mineru-runtime";
 
 afterEach(() => vi.unstubAllEnvs());
 
 describe("portable parser boundaries", () => {
+  it("uses the packaged Python binary for each desktop platform", () => {
+    expect(portablePythonExecutable("/runtime", "win32")).toBe(join("/runtime", "python.exe"));
+    expect(portablePythonExecutable("/runtime", "darwin")).toBe(join("/runtime", "bin", "python3.13"));
+  });
   it("stores models in writable user data rather than installation resources", () => {
     vi.stubEnv("ARGUMESH_DATA_DIR", resolve("tests", "user-data"));
     expect(mineruDataDirectory()).toBe(resolve("tests", "user-data", "data"));

@@ -20,13 +20,14 @@ import { existsSync, mkdirSync, readFileSync, readdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createClient, type Client } from "@libsql/client";
+import { loadBindings } from "../server/env";
 
 config();
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const MIGRATIONS_DIR = join(__dirname, "..", "drizzle");
 
-const DEFAULT_URL = "file:./data/argumesh.db";
+const DEFAULT_URL = loadBindings().DATABASE_URL;
 
 // ─── Migration 0008:单用户本地化(移除账号系统) ───
 

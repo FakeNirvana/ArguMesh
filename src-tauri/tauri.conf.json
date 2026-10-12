@@ -38,16 +38,8 @@
       }
     },
     "resources": {
-      "../build/sidecar/mineru-runtime/": "sidecar/mineru-runtime/",
-      "../build/sidecar/server.mjs": "sidecar/server.mjs",
-      "../build/sidecar/node.exe": "sidecar/node.exe",
-      "../build/sidecar/.env.example": "sidecar/.env.example",
-      "../build/sidecar/README.txt": "sidecar/README.txt",
-      "../build/sidecar/template/argumesh.db": "sidecar/template/argumesh.db",
-      "../build/sidecar/node_modules/@libsql/win32-x64-msvc/*": "sidecar/node_modules/@libsql/win32-x64-msvc/",
-      "../build/sidecar/dist/*": "sidecar/dist/",
-      "../build/sidecar/dist/assets/*": "sidecar/dist/assets/"
+      "../build/sidecar/": "sidecar/"
     },
-    "icon": ["icons/32x32.png", "icons/128x128.png", "icons/128x128@2x.png", "icons/icon.ico"]
+    "icon": ["icons/32x32.png", "icons/128x128.png", "icons/128x128@2x.png", "icons/icon.ico", "icons/icon.icns"]
   }
 }

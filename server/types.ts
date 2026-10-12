@@ -2,6 +2,7 @@
 export interface AppBindings {
   /** Set by the desktop host to enable the optional startup update check. */
   ARGUMESH_DESKTOP?: string;
+  ARGUMESH_DATA_DIR?: string;
   /** libSQL 连接串:本地 file:./data/argumesh.db 或远程 libsql://… */
   DATABASE_URL: string;
   /** 远程 libsql 库的鉴权 token(本地 file: 模式不需要)。 */

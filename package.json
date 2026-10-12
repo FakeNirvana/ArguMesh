@@ -12,6 +12,7 @@
     "build": "tsc --noEmit && vite build",
     "build:sidecar": "node scripts/build-sidecar.mjs",
     "build:mineru": "node scripts/build-mineru-runtime.mjs",
+    "build:mineru:mac": "node scripts/build-mineru-runtime-macos.mjs",
     "start": "tsx server/node.ts",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",

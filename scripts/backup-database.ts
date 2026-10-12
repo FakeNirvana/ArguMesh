@@ -2,8 +2,9 @@ import "dotenv/config";
 import { mkdir, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { createClient } from "@libsql/client";
+import { loadBindings } from "../server/env";
 
-const url = process.env.DATABASE_URL ?? "file:./data/argumesh.db";
+const url = loadBindings().DATABASE_URL;
 const authToken = process.env.DATABASE_AUTH_TOKEN;
 
 const client = createClient({ url, authToken });

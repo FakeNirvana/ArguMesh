@@ -80,7 +80,7 @@ fn launch_sidecar(app: &tauri::AppHandle) -> Result<u16, String> {
     let sidecar_dir = resolve_sidecar_dir(app)?;
     let data_dir = resolve_data_dir(app)?;
 
-    let node_exe = sidecar_dir.join("node.exe");
+    let node_exe = sidecar_dir.join(node_binary_name());
     let server_mjs = sidecar_dir.join("server.mjs");
     for path in [&node_exe, &server_mjs] {
         if !path.is_file() {
@@ -186,6 +186,10 @@ fn launch_sidecar(app: &tauri::AppHandle) -> Result<u16, String> {
     }
 
     Ok(port)
+}
+
+fn node_binary_name() -> &'static str {
+    if cfg!(windows) { "node.exe" } else { "node" }
 }
 
 /// 往 sidecar.log 追一行。写失败就静默跳过 —— 诊断信息不该成为让应用起不来的理由。
@@ -305,6 +309,20 @@ fn strip_long_path_prefix(path: &std::path::Path) -> PathBuf {
 mod tests {
     use super::*;
     use std::path::Path;
+
+    #[test]
+    fn picks_the_host_node_binary_name() {
+        assert_eq!(node_binary_name(), if cfg!(windows) { "node.exe" } else { "node" });
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn keeps_macos_data_in_application_support() {
+        assert_eq!(
+            macos_data_dir(Path::new("/Users/researcher")),
+            PathBuf::from("/Users/researcher/Library/Application Support/ArguMesh")
+        );
+    }
 
     #[test]
     fn strips_win32_long_path_prefix() {
@@ -427,21 +445,32 @@ fn resolve_data_dir(app: &tauri::AppHandle) -> Result<PathBuf, String> {
         return Ok(dir);
     }
 
-    let base = std::env::var_os("LOCALAPPDATA")
+    #[cfg(target_os = "macos")]
+    let dir = std::env::var_os("HOME")
+        .map(|home| macos_data_dir(&PathBuf::from(home)))
+        .or_else(|| app.path().app_local_data_dir().ok())
+        .ok_or_else(|| "无法定位用户数据目录(HOME 未设置)".to_string())?;
+    #[cfg(not(target_os = "macos"))]
+    let dir = std::env::var_os("LOCALAPPDATA")
         .map(PathBuf::from)
         .or_else(|| app.path().app_local_data_dir().ok())
         .map(|p| strip_long_path_prefix(&p))
-        .ok_or_else(|| "无法定位用户数据目录(LOCALAPPDATA 未设置)".to_string())?;
-
-    let dir = base.join("ArguMesh");
+        .ok_or_else(|| "无法定位用户数据目录(LOCALAPPDATA 未设置)".to_string())?
+        .join("ArguMesh");
     fs::create_dir_all(&dir).map_err(|e| format!("创建 {} 失败: {e}", dir.display()))?;
     Ok(dir)
 }
 
+#[cfg(target_os = "macos")]
+fn macos_data_dir(home: &std::path::Path) -> PathBuf {
+    home.join("Library").join("Application Support").join("ArguMesh")
+}
+
 /// 只用于错误文案里提示日志位置,失败也无所谓。
 fn resolve_data_dir_fallback() -> Option<PathBuf> {
-    let base = std::env::var_os("ARGUMESH_DATA_DIR")
-        .map(PathBuf::from)
-        .or_else(|| std::env::var_os("LOCALAPPDATA").map(PathBuf::from))?;
-    Some(base.join("ArguMesh"))
+    if let Some(dir) = std::env::var_os("ARGUMESH_DATA_DIR") { return Some(PathBuf::from(dir)); }
+    #[cfg(target_os = "macos")]
+    { std::env::var_os("HOME").map(|home| macos_data_dir(&PathBuf::from(home))) }
+    #[cfg(not(target_os = "macos"))]
+    { std::env::var_os("LOCALAPPDATA").map(|base| PathBuf::from(base).join("ArguMesh")) }
 }
