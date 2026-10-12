@@ -79,7 +79,7 @@ wrangler deploy --config <打印出的路径>   # 用已认证的 Wrangler CLI �
 
 ## 3. 桌面安装包（Tauri 2 + Node sidecar）
 
-> ✅ **最新正式安装包 v3.3.1**：[GitHub Releases](https://github.com/Fyuan0206/ArguMesh/releases/tag/v3.3.1)。请关闭应用后覆盖安装，保留现有本地研究数据与 AI 配置；新安装使用空库。v3.3.0 桌面版启动时会提示更新，设置页也可手动检查，下载与说明链接通过系统浏览器打开。v3.2.5 用户需先手动升级一次。新版内置独立 Python / MinerU CPU 环境及所需 Windows C++ 库，无需额外安装工具；首次精确翻译自动下载约 2.5 GB 的解析模型到用户数据目录，可取消与重试，重启及升级后复用。
+> **3.3.2 发布准备中**：Windows x64 EXE 重新构建，Mac DMG 待内部版本更新；两平台核验完成后公开 Release。目前正式版仍为 [v3.3.1](https://github.com/Fyuan0206/ArguMesh/releases/tag/v3.3.1)。关闭应用后覆盖安装；安装器保留已有数据库与 AI 配置，新安装使用空库。升级前导出工作区备份；共享工作区并发覆盖及旧状态迁移限制见 README。v3.3.0 起桌面版启动时会提示更新，设置页也可手动检查；v3.2.5 用户需手动升级一次。首次精确翻译自动下载解析模型，可取消与重试，升级后复用。本次提供的 Mac 包内部版本为 3.3.1，需要重新构建后才能作为 3.3.2 发布。
 
 > **首次发布记录**：`v3.2.5` 于 2026-09-24 带上 Windows 安装包发到 [GitHub Releases](https://github.com/Fyuan0206/ArguMesh/releases/tag/v3.2.5)（用户当日重新提出发布）。发布是**手工三步**：提交 → 打 tag → `gh release create` 附带新构建的安装包；`.github/workflows/release.yml` 仍未做。发布说明、两份 README 的「下载安装」章节与 `CHANGELOG.md` 必须带上这三条事实：**安装包里是空库，AI 配置不随包带走**（装完要在设置页重填）、**没有代码签名**（SmartScreen 会拦）、**应用无鉴权**（不要把端口暴露到不可信网络）。
 
@@ -124,7 +124,7 @@ pnpm tauri build
 
 产物：`src-tauri/target/release/bundle/nsis/ArguMesh_<version>_x64-setup.exe`
 
-#### macOS Apple Silicon（本地验证版）
+#### macOS Apple Silicon（DMG）
 
 macOS 使用同一份前端、Hono sidecar 和 Tauri 壳，生成供 Finder 安装的 `.dmg`。构建机需要 Apple Silicon Mac、Xcode Command Line Tools、Node.js ≥ 20、pnpm、uv 和 Rust。Mac 版 Python 3.13.14 与 MinerU 3.4.2 运行时在构建时随包安装，依赖由 `scripts/mineru/requirements-macos-arm64.lock` 固定并校验哈希；模型和用户配置不进安装包。
 
@@ -136,7 +136,7 @@ pnpm run build:sidecar -- --node-exe "$(node -p process.execPath)"
 pnpm tauri build
 ```
 
-Tauri 自动合并 `src-tauri/tauri.macos.conf.json`，目标为 DMG。产物在 `src-tauri/target/release/bundle/dmg/`，可直接检查的应用在 `src-tauri/target/release/bundle/macos/ArguMesh.app`。本机构建**未签名、未公证**，首次启动需用户在 macOS 中手动确认；目前没有上传到 GitHub Releases。此命令只适用于 arm64，不生成 Intel Mac 包。
+Tauri 自动合并 `src-tauri/tauri.macos.conf.json`，目标为 DMG。产物在 `src-tauri/target/release/bundle/dmg/`，可直接检查的应用在 `src-tauri/target/release/bundle/macos/ArguMesh.app`。构建**未签名、未公证**，首次启动需用户在 macOS 中手动确认。用户提供的 `ArguMesh_3.3.2_aarch64.dmg` 内部 `CFBundleShortVersionString`、`CFBundleVersion` 及 sidecar 均为 3.3.1，需要在 Mac 上按 3.3.2 重新构建；本次 Windows 核验不代表 macOS 实机验证。此命令只适用于 arm64，不生成 Intel Mac 包。
 
 若构建只生成 `.app`，但 Finder 排版 AppleScript 导致 DMG 步骤失败，可在 `src-tauri/target/release/bundle/macos/` 下用已生成的 `../dmg/bundle_dmg.sh` 加 `--skip-jenkins` 重新制作 DMG。该选项只跳过窗口图标位置与背景排版，保留应用和 Applications 快捷入口；先卸载失败构建留下的临时磁盘映像。此构建环境曾遇到该问题。
 
