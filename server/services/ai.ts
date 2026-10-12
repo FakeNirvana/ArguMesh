@@ -49,7 +49,6 @@ export function getAiProviders(env: AppBindings): AiProviderConfig[] {
     apiKey: env.STEPFUN_API_KEY ?? "",
     models: (env.AI_MODELS ?? env.STEPFUN_MODEL ?? "").split(",").map((item) => item.trim()).filter(Boolean),
   };
-  if (!fallback.baseUrl || !fallback.apiKey) return [];
   const providers = parseProviders(env.AI_PROVIDERS, fallback);
   // 只暴露可调用的 provider(占位/空 key 过滤掉),避免前端列表与默认选中落到不可用项。
   return providers.filter(isUsable);
@@ -57,7 +56,7 @@ export function getAiProviders(env: AppBindings): AiProviderConfig[] {
 
 /** 判断 provider 是否可调用(占位/空 key 视为不可用,如未配置完成的 StepFun)。 */
 function isUsable(provider: AiProviderConfig): boolean {
-  return Boolean(provider.apiKey && !provider.apiKey.startsWith("__TODO__") && !provider.apiKey.startsWith("__"));
+  return Boolean(provider.baseUrl && provider.apiKey && !provider.apiKey.startsWith("__TODO__") && !provider.apiKey.startsWith("__"));
 }
 
 export function findProvider(env: AppBindings, providerId: string | undefined): AiProviderConfig | null {

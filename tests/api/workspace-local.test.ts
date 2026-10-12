@@ -22,4 +22,31 @@ describe("desktop workspace persistence", () => {
       rmSync(directory, { recursive: true, force: true });
     }
   });
+
+  it("shares page translations and OCR text across local server origins", async () => {
+    const directory = mkdtempSync(join(tmpdir(), "argumesh-reader-cache-"));
+    const bindings = { ARGUMESH_DATA_DIR: directory, DATABASE_URL: "file:unused.db" };
+    const translation = { source: "Test sentence", blocks: [{ index: 0, source: "Test sentence", translation: "测试句子", model: "test-model" }] };
+    const base = "http://localhost/api/workspace/papers/paper-1";
+    try {
+      const saved = await app.request(`${base}/translations/2?language=${encodeURIComponent("中文:layout-v2")}`, { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify(translation) }, bindings);
+      expect(saved.status).toBe(200);
+      const loaded = await app.request(`${base}/translations/2?language=${encodeURIComponent("中文:layout-v2")}`, {}, bindings);
+      expect((await loaded.json()) as unknown).toEqual({ data: translation });
+      const otherPage = await app.request(`${base}/translations/1?language=${encodeURIComponent("中文:layout-v2")}`, {}, bindings);
+      expect((await otherPage.json()) as unknown).toEqual({ data: null });
+
+      const ocrSaved = await app.request(`${base}/ocr/2`, { method: "PUT", body: "Saved OCR text" }, bindings);
+      expect(ocrSaved.status).toBe(200);
+      const ocrLoaded = await app.request(`${base}/ocr`, {}, bindings);
+      expect((await ocrLoaded.json()) as unknown).toEqual({ data: { 2: "Saved OCR text" } });
+
+      const deleted = await app.request(`${base}/cache`, { method: "DELETE" }, bindings);
+      expect(deleted.status).toBe(200);
+      const afterDelete = await app.request(`${base}/translations/2?language=${encodeURIComponent("中文:layout-v2")}`, {}, bindings);
+      expect((await afterDelete.json()) as unknown).toEqual({ data: null });
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
 });

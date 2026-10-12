@@ -21,7 +21,7 @@ pnpm run build
 pnpm start          # http://127.0.0.1:8787
 ```
 
-本机网页端与同一系统用户安装的桌面客户端共用数据目录：macOS 为 `~/Library/Application Support/ArguMesh`，Windows 为 `%LOCALAPPDATA%\ArguMesh`，Linux 为 `$XDG_DATA_HOME/ArguMesh`（未设置时为 `~/.local/share/ArguMesh`）。数据库在 `data/argumesh.db`，Paper Card、矩阵列表及其他浏览器工作区状态保存在 `workspace.json`。首次从源码启动且尚未安装客户端时，先运行 `pnpm run db:seed`；已有数据库时可按需运行 `pnpm run db:migrate`。`ARGUMESH_DATA_DIR` 可显式覆盖数据目录，`DATABASE_URL` 可单独覆盖数据库位置；若只覆盖后者，两端将不再共用同一个数据库。
+本机网页端与同一系统用户安装的桌面客户端共用数据目录：macOS 为 `~/Library/Application Support/ArguMesh`，Windows 为 `%LOCALAPPDATA%\ArguMesh`，Linux 为 `$XDG_DATA_HOME/ArguMesh`（未设置时为 `~/.local/share/ArguMesh`）。数据库在 `data/argumesh.db`，Paper Card、矩阵列表及其他浏览器工作区状态保存在 `workspace.json`，OCR 文本与逐页译文保存在 `workspace-cache/`。首次从源码启动且尚未安装客户端时，先运行 `pnpm run db:seed`；已有数据库时可按需运行 `pnpm run db:migrate`。`ARGUMESH_DATA_DIR` 可显式覆盖数据目录，`DATABASE_URL` 可单独覆盖数据库位置；若只覆盖后者，两端将不再共用同一个数据库。
 
 `.env` 可选，全部配置见 [`DEVELOPMENT.md`](DEVELOPMENT.md) 的环境变量表。
 

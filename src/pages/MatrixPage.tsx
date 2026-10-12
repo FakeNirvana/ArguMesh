@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type CSSProperties } from "react";
+import { createPortal } from "react-dom";
 import { useNavigate, useParams } from "react-router-dom";
 import {
   ArrowsOutSimple,
@@ -14,11 +15,13 @@ import {
   Question,
   Sparkle,
   WarningCircle,
+  X,
 } from "@phosphor-icons/react";
 import { Topbar } from "../components/Topbar";
 import { EmptyState, ErrorState, LoadingState } from "../components/states";
 import {
   extractMatrix,
+  confirmMatrixEvidence,
   getMatrixById,
   updateEvidence,
   type EvidenceCell,
@@ -29,12 +32,49 @@ import { useProject } from "../state/project";
 import { useWorkspace, type LocalMatrix } from "../state/workspace";
 import { extractPdfText } from "../pdf/document";
 import { resolvePaperPdf } from "../pdf/resolvePaperPdf";
+import { canBatchConfirm, evidencePageNumber, matrixReviewEntries } from "../matrix/review";
+import { useDialogKeyboard } from "../components/useDialogKeyboard";
 
 interface Selection {
   rowId: string;
   rowLabel: string;
   groupLabel: string;
   paperId: string;
+}
+
+interface BatchReview {
+  matrixId: string;
+  paperId?: string;
+  title: string;
+  paperCount: number;
+  entries: ReturnType<typeof matrixReviewEntries>;
+}
+
+function BatchReviewDialog({ review, saving, error, onClose, onConfirm }: {
+  review: BatchReview; saving: boolean; error: string; onClose: () => void; onConfirm: () => void;
+}) {
+  const ref = useDialogKeyboard<HTMLDivElement>(onClose);
+  const count = review.entries.filter(({ cell }) => canBatchConfirm(cell)).length;
+  useEffect(() => {
+    const previous = document.activeElement as HTMLElement | null;
+    ref.current?.querySelector<HTMLButtonElement>("button")?.focus();
+    return () => previous?.focus();
+  }, [ref]);
+  return createPortal(<div className="crud-modal-backdrop" onClick={(event) => { if (event.target === event.currentTarget) onClose(); }}>
+    <div ref={ref} className="crud-modal matrix-review-dialog" role="dialog" aria-modal="true" aria-labelledby="matrix-review-title" aria-describedby="matrix-review-description">
+      <header><div><strong id="matrix-review-title">批量确认并锁定</strong><span>{review.title}</span></div>
+        <button type="button" className="icon-button" disabled={saving} aria-label="关闭批量确认" onClick={onClose}><X /></button></header>
+      <div className="matrix-review-description" id="matrix-review-description">
+        <p>范围：{review.paperCount} 篇文献，{review.entries.length} 个证据单元格。</p>
+        <p>将确认并锁定 <strong>{count}</strong> 个有原文摘录与来源位置的草稿，跳过 <strong>{review.entries.length - count}</strong> 个已确认、锁定、缺失、冲突或尚未提取的单元格。</p>
+        {!review.paperId ? <p>此操作包含当前矩阵的所有文献，包括搜索框隐藏的文献。</p> : null}
+        <p>请在核对原文后确认。批量确认记录的是你的判断，不会自动核验证据；锁定后的内容不会被 AI 批量覆盖。</p>
+        {error ? <p role="alert">{error}</p> : null}
+      </div>
+      <footer><button type="button" className="secondary-button" disabled={saving} onClick={onClose}>取消</button>
+        <button type="button" className="primary" disabled={saving || !count} onClick={onConfirm}><LockSimple />{saving ? "正在确认…" : `确认并锁定 ${count} 项`}</button></footer>
+    </div>
+  </div>, document.body);
 }
 
 function StatusMark({ type }: { type: EvidenceStatus }) {
@@ -96,6 +136,9 @@ export function MatrixPage() {
   const [extracting, setExtracting] = useState(false);
   const [aiMessage, setAiMessage] = useState("");
   const [progress, setProgress] = useState(0);
+  const [batchReview, setBatchReview] = useState<BatchReview | null>(null);
+  const [reviewError, setReviewError] = useState("");
+  const [reviewMessage, setReviewMessage] = useState("");
 
   const loadMatrix = useCallback(async () => {
     if (!matrixId) { setLoading(false); return; }
@@ -104,7 +147,7 @@ export function MatrixPage() {
     try {
       const response = localMatrix ? localMatrixResponse(localMatrix, workspace.papers) : await getMatrixById(matrixId);
       setData(response);
-      setProjectId(projectId);
+      setProjectId(response.project.id);
       setProgress(response.project.extractionProgress);
       setSelected((current) => current ?? firstSelection(response));
     } catch (error) {
@@ -130,6 +173,8 @@ export function MatrixPage() {
   const selectedCell = selected && data ? data.cells[`${selected.rowId}:${selected.paperId}`] : undefined;
   const selectedPaper = selected && data ? data.papers.find((paper) => paper.id === selected.paperId) : undefined;
   const verified = selectedCell?.status === "confirmed" && selectedCell.locked;
+  const confirmableCount = data ? matrixReviewEntries(data).filter(({ cell }) => canBatchConfirm(cell)).length : 0;
+  const paperConfirmableCount = data && selected ? matrixReviewEntries(data, selected.paperId).filter(({ cell }) => canBatchConfirm(cell)).length : 0;
 
   function toggleGroup(id: string) {
     setCollapsed((current) => ({ ...current, [id]: !current[id] }));
@@ -141,7 +186,7 @@ export function MatrixPage() {
    * 论文与维度:本地矩阵取 workspace,云端矩阵取已加载的 data。
    */
   async function runExtraction() {
-    if (extracting) return;
+    if (extracting || saving || batchReview) return;
     const taskId = workspace.addTask({ projectId: data?.project.id ?? projectId, title: `提取矩阵：${workspaceMatrix?.name ?? data?.project.name ?? matrixId}`, detail: `${data?.papers.length ?? 0} 篇论文 · ${data?.groups.flatMap((group) => group.rows).length ?? 0} 个研究维度` });
     workspace.updateTask(taskId, { status: "running", progress: 10 });
     setExtracting(true);
@@ -214,7 +259,7 @@ export function MatrixPage() {
   }
 
   async function persistStatus(status: EvidenceStatus, locked: boolean) {
-    if (!selectedCell || saving) return;
+    if (!selectedCell || saving || extracting || batchReview) return;
     setSaving(true);
     setLoadError("");
     try {
@@ -240,15 +285,36 @@ export function MatrixPage() {
   }
 
   function openSource() {
-    if (!selectedPaper?.hasFile) return;
-    void resolvePaperPdf(selectedPaper.id, selectedPaper.title)
-      .then((blob) => {
-        if (!blob) throw new Error("当前浏览器与数据库中均未找到该 PDF");
-        const url = URL.createObjectURL(blob);
-        window.open(url, "_blank", "noopener,noreferrer");
-        window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
-      })
-      .catch((error: unknown) => setLoadError(error instanceof Error ? error.message : "打开 PDF 失败"));
+    if (!selectedPaper?.hasFile || !data) return;
+    const page = evidencePageNumber(selectedCell?.sourcePage ?? "");
+    navigate(`/projects/${encodeURIComponent(data.project.id)}/library/${encodeURIComponent(selectedPaper.id)}/read${page ? `?page=${page}` : ""}`);
+  }
+
+  function startBatchReview(paperId?: string) {
+    if (!data || extracting || saving || batchReview) return;
+    setReviewError(""); setReviewMessage("");
+    setBatchReview({ matrixId, paperId, title: paperId ? `本篇：${data.papers.find((paper) => paper.id === paperId)?.title ?? ""}` : `整个矩阵：${data.project.name}`,
+      paperCount: paperId ? 1 : data.papers.length, entries: matrixReviewEntries(data, paperId) });
+  }
+
+  async function persistBatchReview() {
+    if (!batchReview || saving) return;
+    const review = batchReview;
+    const eligible = review.entries.filter(({ cell }) => canBatchConfirm(cell));
+    if (!eligible.length) return;
+    setSaving(true); setReviewError("");
+    try {
+      const updatedIds = localMatrix
+        ? (workspace.confirmMatrixCells(localMatrix.id, eligible.map(({ key }) => key)), eligible.map(({ cell }) => cell.id))
+        : (await confirmMatrixEvidence(review.matrixId, eligible.map(({ cell }) => cell.id), review.paperId)).updatedIds;
+      const updated = new Set(updatedIds);
+      setData((current) => current ? { ...current, cells: Object.fromEntries(Object.entries(current.cells).map(([key, cell]) =>
+        [key, updated.has(cell.id) ? { ...cell, status: "confirmed" as const, locked: true } : cell])) } : current);
+      setReviewMessage(`已确认并锁定 ${updatedIds.length} 项，跳过 ${review.entries.length - updatedIds.length} 项。`);
+      setBatchReview(null);
+    } catch (error) {
+      setReviewError(error instanceof Error ? error.message : "批量确认失败，请重试。");
+    } finally { setSaving(false); }
   }
 
   function onToggleSidebar() {
@@ -274,6 +340,7 @@ export function MatrixPage() {
         progress={progress}
         aiMessage={aiMessage}
         extracting={extracting}
+        extractionDisabled={saving || Boolean(batchReview)}
         onRunExtraction={() => void runExtraction()}
         loadError={loadError && !loading ? loadError : null}
         onRetry={() => void loadMatrix()}
@@ -281,6 +348,12 @@ export function MatrixPage() {
       />
       <div className="content">
         <section className="matrix-panel" aria-label="证据矩阵">
+          {!loading && data ? <div className="matrix-review-bar">
+            <span>{confirmableCount} 项可批量确认</span>
+            <button type="button" className="secondary-button" disabled={!selectedPaper || !paperConfirmableCount || saving || extracting} onClick={() => startBatchReview(selectedPaper?.id)} title={selectedPaper?.title}><CheckCircle />确认本篇（{paperConfirmableCount}）</button>
+            <button type="button" className="secondary-button" disabled={!confirmableCount || saving || extracting} onClick={() => startBatchReview()}><CheckCircle />确认整个矩阵（{confirmableCount}）</button>
+            {reviewMessage ? <span className="matrix-review-result" role="status">{reviewMessage}</span> : null}
+          </div> : null}
           <div className="matrix-scroll">
             {!matrixId ? (
               <EmptyState
@@ -455,20 +528,20 @@ export function MatrixPage() {
                 <span>证据核验</span>
                 <button
                   className={selectedCell?.status === "confirmed" && !selectedCell.locked ? "chosen" : ""}
-                  disabled={!selectedCell || saving}
+                  disabled={!selectedCell || saving || extracting}
                   onClick={() => void persistStatus("confirmed", false)}
                 >
                   <CheckCircle /> 原文一致
                 </button>
                 <button
-                  disabled={!selectedCell || saving}
+                  disabled={!selectedCell || saving || extracting}
                   onClick={() => void persistStatus("draft", false)}
                 >
                   <PencilSimple /> 需要修订
                 </button>
                 <button
                   className={selectedCell?.status === "conflict" ? "chosen conflict" : ""}
-                  disabled={!selectedCell || saving}
+                  disabled={!selectedCell || saving || extracting}
                   onClick={() => void persistStatus("conflict", false)}
                 >
                   <WarningCircle /> 标记冲突
@@ -476,7 +549,7 @@ export function MatrixPage() {
               </div>
               <button
                 className="confirm"
-                disabled={!selectedCell || saving}
+                disabled={!selectedCell || saving || extracting}
                 onClick={() => void persistStatus("confirmed", true)}
               >
                 <LockSimple />
@@ -486,6 +559,7 @@ export function MatrixPage() {
           </article>
         </section>
       </div>
+      {batchReview ? <BatchReviewDialog review={batchReview} saving={saving} error={reviewError} onClose={() => { if (!saving) setBatchReview(null); }} onConfirm={() => void persistBatchReview()} /> : null}
       <noscript>
         <p style={{ padding: 24 }}>
           ArguMesh requires JavaScript to render the Evidence Matrix.

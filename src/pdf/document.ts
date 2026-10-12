@@ -2,6 +2,7 @@ import { GlobalWorkerOptions, getDocument, type PDFDocumentProxy, type PDFPagePr
 import { getPaperPageTexts, savePaperPageText } from "../storage/paperFiles";
 import { layoutTextItems, type LayoutTextItem, type PageLayout } from "./layout";
 import { readableFigureText } from "./figureOcr";
+import { recognizeLocalImage, waitForOcr, type OcrOptions } from "./ocr";
 
 GlobalWorkerOptions.workerSrc = new URL("pdfjs-dist/build/pdf.worker.min.mjs", import.meta.url).toString();
 
@@ -107,45 +108,48 @@ export async function currentPageText(page: PDFPageProxy, paperId: string): Prom
   if (native.length >= 40) return { text: native, source: "native", layout };
   const storedOcr = await getPaperPageTexts(paperId);
   const ocr = (storedOcr[page.pageNumber] ?? "").trim();
-  if (ocr.length >= 40) return { text: ocr, source: "ocr", layout: null };
+  if (ocr.length >= 2) return { text: ocr, source: "ocr", layout: null };
   return { text: "", source: "empty", layout: null };
 }
 
-export async function recognizePdfPage(page: PDFPageProxy, paperId: string, onProgress?: (progress: number) => void) {
-  const viewport = page.getViewport({ scale: 2 });
+export async function recognizePdfPage(page: PDFPageProxy, paperId: string, onProgress?: (progress: number) => void, options: OcrOptions = {}) {
+  const base = page.getViewport({ scale: 1 });
+  const viewport = page.getViewport({ scale: Math.min(2, Math.sqrt(10_000_000 / (base.width * base.height))) });
   const canvas = window.document.createElement("canvas");
   canvas.width = Math.ceil(viewport.width);
   canvas.height = Math.ceil(viewport.height);
   const context = canvas.getContext("2d");
   if (!context) throw new Error("浏览器无法创建 OCR 画布");
-  await page.render({ canvasContext: context, viewport }).promise;
-  const { createWorker } = await import("tesseract.js");
-  const worker = await createWorker("eng", undefined, {
-    logger: (message) => {
-      if (message.status === "recognizing text" && typeof message.progress === "number") onProgress?.(message.progress);
-    },
-  });
+  const renderTimeout = AbortSignal.timeout(30_000);
+  const signal = options.signal ? AbortSignal.any([options.signal, renderTimeout]) : renderTimeout;
+  const render = page.render({ canvasContext: context, viewport });
+  const cancelRender = () => render.cancel();
+  if (signal.aborted) render.cancel();
+  signal.addEventListener("abort", cancelRender, { once: true });
   try {
-    const result = await worker.recognize(canvas);
+    await waitForOcr(render.promise, signal);
+  } catch (error) {
+    if (renderTimeout.aborted && !options.signal?.aborted) throw new Error("OCR 页面渲染超时，请重试或降低页面分辨率。");
+    throw error;
+  } finally {
+    signal.removeEventListener("abort", cancelRender);
+  }
+  try {
+    const result = await recognizeLocalImage(canvas, { ...options, onProgress });
     const text = result.data.text.replace(/\s+/g, " ").trim();
     if (!text) throw new Error("本页没有识别出文字");
+    options.signal?.throwIfAborted();
     await savePaperPageText(paperId, page.pageNumber, text);
     return text;
   } finally {
-    await worker.terminate();
+    canvas.width = 0; canvas.height = 0;
   }
 }
 
 /** OCR only the extracted figure image in the browser; no image is sent to the text-only translation model. */
 export async function recognizeFigureText(image: string): Promise<string> {
-  const { createWorker } = await import("tesseract.js");
-  const worker = await createWorker("eng");
-  try {
-    const result = await worker.recognize(image, {}, { tsv: true });
-    return readableFigureText(result.data.tsv);
-  } finally {
-    await worker.terminate();
-  }
+  const result = await recognizeLocalImage(image);
+  return readableFigureText(result.data.tsv);
 }
 
 export async function sha256File(file: Blob) {

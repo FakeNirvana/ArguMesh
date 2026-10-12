@@ -2,7 +2,7 @@ import { ArrowCounterClockwise, Check, Cpu, DownloadSimple, Eye, EyeSlash, Info,
 import { useEffect, useRef, useState, type ChangeEvent, type FormEvent } from "react";
 import { PageHeader } from "../components/PageHeader";
 import { UpdateSettings } from "../components/UpdateNotice";
-import { deleteAiConfig, getAiConfig, saveAiConfig, type AiConfig } from "../api";
+import { deleteAiConfig, getAiConfig, saveAiConfig, testAiConnection, type AiConfig } from "../api";
 import { useWorkspace } from "../state/workspace";
 
 export function SettingsPage() {
@@ -24,6 +24,10 @@ export function SettingsPage() {
   const [aiMessage, setAiMessage] = useState("");
   const [aiError, setAiError] = useState(false);
   const [aiSaving, setAiSaving] = useState(false);
+  const [aiLoading, setAiLoading] = useState(true);
+  const [aiTesting, setAiTesting] = useState(false);
+  const [aiCheck, setAiCheck] = useState<{ message: string; error: boolean } | null>(null);
+  const aiCheckController = useRef<AbortController | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -34,8 +38,13 @@ export function SettingsPage() {
         if (config.baseUrl) setAiBaseUrl(config.baseUrl);
         setAiModel(config.model);
       })
-      .catch(() => { /* Keep editable defaults when the request fails. */ });
-    return () => { cancelled = true; };
+      .catch(() => {
+        if (cancelled) return;
+        setAiError(true);
+        setAiMessage("无法读取 AI 配置，请刷新后重试；也可重新填写并保存配置。");
+      })
+      .finally(() => { if (!cancelled) setAiLoading(false); });
+    return () => { cancelled = true; aiCheckController.current?.abort(); };
   }, []);
 
   function submit(event: FormEvent<HTMLFormElement>) {
@@ -53,6 +62,7 @@ export function SettingsPage() {
     if (!model) { setAiError(true); setAiMessage("请填写模型名称"); return; }
     if (!apiKey && !aiConfig?.configured) { setAiError(true); setAiMessage("请填写 API Key"); return; }
     setAiSaving(true);
+    setAiCheck(null);
     setAiError(false);
     setAiMessage("");
     try {
@@ -73,9 +83,11 @@ export function SettingsPage() {
   async function clearAi() {
     if (!window.confirm("确定清除已保存的 AI 配置？清除后 AI 功能将回落到服务器环境配置（若有）。")) return;
     setAiError(false);
+    setAiSaving(true);
+    setAiCheck(null);
     try {
       await deleteAiConfig();
-      setAiConfig(null);
+      setAiConfig(await getAiConfig());
       setAiApiKey("");
       setAiModel("");
       setAiBaseUrl("https://api.openai.com/v1");
@@ -83,6 +95,25 @@ export function SettingsPage() {
     } catch (error) {
       setAiError(true);
       setAiMessage(error instanceof Error ? (error.message === "Unauthorized" ? "登录已过期，请重新登录" : error.message) : "清除失败");
+    } finally {
+      setAiSaving(false);
+    }
+  }
+
+  async function checkAi() {
+    const controller = new AbortController();
+    aiCheckController.current = controller;
+    setAiTesting(true);
+    setAiCheck(null);
+    try {
+      const result = await testAiConnection(controller.signal);
+      if (controller.signal.aborted) return;
+      setAiCheck({ error: false, message: `连接成功 · ${result.provider} · ${result.model} · ${result.apiFormat === "anthropic" ? "Anthropic Messages" : "OpenAI 兼容接口"} · ${(result.latencyMs / 1000).toFixed(2)} 秒 · ${new Date(result.checkedAt).toLocaleString()}` });
+    } catch (error) {
+      setAiCheck({ error: !controller.signal.aborted, message: controller.signal.aborted ? "连接自检已取消。" : error instanceof Error ? error.message : "连接自检失败，请稍后重试。" });
+    } finally {
+      aiCheckController.current = null;
+      setAiTesting(false);
     }
   }
 
@@ -105,9 +136,11 @@ export function SettingsPage() {
     event.target.value = "";
   }
 
-  const environmentLabel = aiConfig?.envProviders.length
-    ? aiConfig.envProviders.map((provider) => provider.label).join("、")
-    : "未检测到";
+  const environmentLabel = aiLoading ? "读取中…" : !aiConfig ? "状态读取失败"
+    : aiConfig.configured ? `自定义配置 · ${aiConfig.model || "模型未填写"}`
+    : aiConfig.envProviders.length ? `环境配置 · ${aiConfig.envProviders[0].label} · ${aiConfig.envProviders[0].models[0] || "模型未填写"}` : "未配置";
+  const aiDirty = Boolean(aiApiKey.trim()) || aiBaseUrl.trim().replace(/\/+$/, "") !== (aiConfig?.baseUrl || "https://api.openai.com/v1") || aiModel.trim() !== (aiConfig?.model || "");
+  const aiBusy = aiLoading || aiSaving || aiTesting;
   const toggleInfo = (id: string) => setExpandedInfo((current) => current === id ? null : id);
 
   return (
@@ -125,13 +158,16 @@ export function SettingsPage() {
         </section>
 
         <section className="settings-section settings-model" aria-labelledby="model-settings-title">
-          <header className="settings-section-header"><span><Cpu /></span><div><h2 id="model-settings-title">模型接入</h2><p>配置大模型服务以启用 AI 研究能力。</p></div><em className="environment-badge"><i aria-hidden />当前使用环境：{environmentLabel}</em></header>
+          <header className="settings-section-header"><span><Cpu /></span><div><h2 id="model-settings-title">模型接入</h2><p>配置大模型服务以启用 AI 研究能力。</p></div><em className="environment-badge"><i aria-hidden />当前配置：{environmentLabel}</em></header>
           <div className="model-config-surface">
-            <label className="settings-field" htmlFor="ai-base-url"><span>Base URL</span><input id="ai-base-url" value={aiBaseUrl} onChange={(event) => setAiBaseUrl(event.target.value)} placeholder="https://api.openai.com/v1" /><small>支持 OpenAI 兼容接口；以 /anthropic 结尾时自动使用 Anthropic Messages API。</small></label>
-            <label className="settings-field" htmlFor="ai-api-key"><span>API Key</span><span className="settings-secret-control"><input id="ai-api-key" type={showApiKey ? "text" : "password"} value={aiApiKey} onChange={(event) => setAiApiKey(event.target.value)} placeholder={aiConfig?.apiKeyMasked ? `已保存 ${aiConfig.apiKeyMasked}（留空保持不变）` : "sk-..."} autoComplete="off" /><button type="button" onClick={() => setShowApiKey((visible) => !visible)} aria-label={showApiKey ? "隐藏 API Key" : "显示 API Key"}>{showApiKey ? <EyeSlash /> : <Eye />}</button></span><small>密钥仅保存在服务器账户中。</small></label>
-            <label className="settings-field" htmlFor="ai-model"><span>模型名称</span><input id="ai-model" value={aiModel} onChange={(event) => setAiModel(event.target.value)} placeholder="如 gpt-4o-mini" /><small>Paper Card、证据提取与阅读问答将使用此模型。</small></label>
-            <div className="model-config-actions"><button className="primary" type="button" disabled={aiSaving} onClick={() => void saveAi()}>{aiSaving ? "保存中…" : "保存 AI 配置"}</button>{aiConfig?.configured ? <button className="secondary-button" type="button" onClick={() => void clearAi()}>清除配置</button> : null}</div>
-            {aiMessage ? <p className={aiError ? "settings-message ai-error" : "settings-message"}>{aiMessage}</p> : null}
+            <label className="settings-field" htmlFor="ai-base-url"><span>Base URL</span><input id="ai-base-url" value={aiBaseUrl} disabled={aiBusy} onChange={(event) => { setAiBaseUrl(event.target.value); setAiCheck(null); }} placeholder="https://api.openai.com/v1" /><small>支持 OpenAI 兼容接口；以 /anthropic 结尾时自动使用 Anthropic Messages API。</small></label>
+            <label className="settings-field" htmlFor="ai-api-key"><span>API Key</span><span className="settings-secret-control"><input id="ai-api-key" type={showApiKey ? "text" : "password"} value={aiApiKey} disabled={aiBusy} onChange={(event) => { setAiApiKey(event.target.value); setAiCheck(null); }} placeholder={aiConfig?.apiKeyMasked ? `已保存 ${aiConfig.apiKeyMasked}（留空保持不变）` : "sk-..."} autoComplete="off" /><button type="button" onClick={() => setShowApiKey((visible) => !visible)} aria-label={showApiKey ? "隐藏 API Key" : "显示 API Key"}>{showApiKey ? <EyeSlash /> : <Eye />}</button></span><small>密钥仅保存在本机服务端数据库中。</small></label>
+            <label className="settings-field" htmlFor="ai-model"><span>模型名称</span><input id="ai-model" value={aiModel} disabled={aiBusy} onChange={(event) => { setAiModel(event.target.value); setAiCheck(null); }} placeholder="如 gpt-4o-mini" /><small>Paper Card、证据提取与阅读问答将使用此模型。</small></label>
+            <div className="model-config-actions"><button className="primary" type="button" disabled={aiBusy} onClick={() => void saveAi()}>{aiSaving ? "保存中…" : "保存 AI 配置"}</button><button className="secondary-button" type="button" disabled={aiBusy || aiDirty || !aiConfig} onClick={() => void checkAi()}>{aiTesting ? "自检中…" : "连接自检"}</button>{aiTesting ? <button className="secondary-button" type="button" onClick={() => aiCheckController.current?.abort()}>取消自检</button> : null}{aiConfig?.configured ? <button className="secondary-button" type="button" disabled={aiBusy} onClick={() => void clearAi()}>清除配置</button> : null}</div>
+            <p className="model-check-hint">{aiDirty ? "配置有未保存的修改，请先保存再自检。" : "自检向当前配置的模型发送一条固定短消息，会产生少量调用费用；不发送论文内容，最长等待 30 秒。"}</p>
+            {aiMessage ? <p className={aiError ? "settings-message ai-error" : "settings-message"} role={aiError ? "alert" : "status"}>{aiMessage}</p> : null}
+            {aiTesting ? <p className="model-check-hint" role="status" aria-live="polite" aria-busy="true">正在等待模型回复…</p> : null}
+            {aiCheck ? <p className={aiCheck.error ? "settings-message ai-error" : "settings-message"} role={aiCheck.error ? "alert" : "status"}>{aiCheck.message}</p> : null}
           </div>
         </section>
 

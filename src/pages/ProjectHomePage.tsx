@@ -2,6 +2,7 @@ import { ArrowRight, BookOpenText, Brain, CaretDown, ChatCircleDots, ClockCounte
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import {
+  AgentTurnBusyError,
   cancelAiConversation,
   createAiConversation,
   deleteAiConversation,
@@ -47,9 +48,15 @@ export function ProjectHomePage() {
   const [streamHint, setStreamHint] = useState("");
   const [error, setError] = useState("");
   const endRef = useRef<HTMLDivElement>(null);
+  const sendingRef = useRef<AbortController | null>(null);
+  useEffect(() => {
+    setSending(false); setStreamHint(""); setError("");
+    return () => { sendingRef.current?.abort(); sendingRef.current = null; };
+  }, [projectId]);
 
-  const loadConversation = useCallback(async (pid: string, conversationId: string) => {
+  const loadConversation = useCallback(async (pid: string, conversationId: string, isCurrent: () => boolean = () => true) => {
     const detail = await getAiConversation(pid, conversationId);
+    if (!isCurrent()) return;
     setMessages(detail.messages); setActions(detail.actions); setActiveId(conversationId);
   }, []);
 
@@ -67,8 +74,8 @@ export function ProjectHomePage() {
         }
         if (cancelled) return;
         setConversations(list);
-        await loadConversation(projectId, list[0].id);
-      }).catch(() => setError("无法加载项目研究助手。"));
+        await loadConversation(projectId, list[0].id, () => !cancelled);
+      }).catch(() => { if (!cancelled) setError("无法加载项目研究助手。"); });
     return () => { cancelled = true; };
   }, [projectId, loadConversation]);
   useEffect(() => { endRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages, sending]);
@@ -89,8 +96,12 @@ export function ProjectHomePage() {
   }
   async function stopConversation() {
     if (!projectId || !activeId) return;
-    await cancelAiConversation(projectId, activeId);
-    setConversations((items) => items.map((item) => item.id === activeId ? { ...item, status: "cancelled" } : item));
+    try {
+      await cancelAiConversation(projectId, activeId);
+      sendingRef.current?.abort();
+      setError("");
+      setConversations((items) => items.map((item) => item.id === activeId ? { ...item, status: "cancelled" } : item));
+    } catch { setError("无法结束会话，请重试。"); }
   }
   async function removeConversation(conversationId: string) {
     if (!projectId || !window.confirm("确定删除该会话？消息与动作记录将一并清除。")) return;
@@ -110,7 +121,9 @@ export function ProjectHomePage() {
     }
   }
   async function submitContent(content: string) {
-    if (!projectId || !activeId || !content.trim() || sending || active?.status === "cancelled") return;
+    if (!projectId || !activeId || !content.trim() || sendingRef.current || active?.status === "cancelled") return;
+    const controller = new AbortController();
+    sendingRef.current = controller;
     const optimistic: AiMessage = {
       id: `local-${Date.now()}`, conversationId: activeId, projectId, role: "user", content: content.trim(), citations: [],
       model: null, status: "completed", error: "", createdAt: new Date().toISOString(),
@@ -118,26 +131,31 @@ export function ProjectHomePage() {
     setMessages((items) => [...items, optimistic]); setSending(true); setError(""); setStreamHint("Research Agent 推理中…");
     try {
       await sendAiMessage(projectId, activeId, content.trim(), (event) => {
+        if (sendingRef.current !== controller) return;
         if (event.type === "tool_start") {
           const name = String(event.toolName ?? "");
           setStreamHint(`工具：${TOOL_LABELS[name] ?? name}`);
         }
         else if (event.type === "text_delta") setStreamHint("生成回复中…");
         else if (event.type === "agent_end" || event.type === "done") setStreamHint("");
-      });
-      await loadConversation(projectId, activeId);
-      const refreshed = await listAiConversations(projectId); setConversations(refreshed.conversations);
+      }, controller.signal);
+      if (sendingRef.current !== controller) return;
+      await loadConversation(projectId, activeId, () => sendingRef.current === controller);
+      if (sendingRef.current !== controller) return;
+      const refreshed = await listAiConversations(projectId);
+      if (sendingRef.current === controller) setConversations(refreshed.conversations);
     } catch (cause) {
+      if (sendingRef.current !== controller) return;
       const detail = cause instanceof Error && cause.message.trim() ? cause.message.trim() : "";
-      setError(
+      if (!controller.signal.aborted) setError(
         detail
           ? `本回合失败：${detail}`
           : "本回合失败。消息已保留，可以在下方重试；请检查 AI 配置或网络。",
       );
-      await getAiConversation(projectId, activeId, { healPending: true })
-        .then((detail) => { setMessages(detail.messages); setActions(detail.actions); })
+      await getAiConversation(projectId, activeId, { healPending: !(cause instanceof AgentTurnBusyError) })
+        .then((detail) => { if (sendingRef.current === controller) { setMessages(detail.messages); setActions(detail.actions); } })
         .catch(() => undefined);
-    } finally { setSending(false); setStreamHint(""); }
+    } finally { if (sendingRef.current === controller) { sendingRef.current = null; setSending(false); setStreamHint(""); } }
   }
   function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault(); const form = event.currentTarget; const fd = new FormData(form); const content = String(fd.get("message") ?? "");
@@ -152,7 +170,7 @@ export function ProjectHomePage() {
           <div className="agent-title-row"><h1>{project.name}</h1><span className="agent-project-state">研究中</span></div>
         </div>
         <div className="agent-session-controls" role="group" aria-label="会话操作">
-          <button type="button" className="agent-new-conversation" onClick={newConversation}><ChatCircleDots weight="bold" />新对话</button>
+          <button type="button" className="agent-new-conversation" disabled={sending} onClick={newConversation}><ChatCircleDots weight="bold" />新对话</button>
           <details className="agent-history-menu">
             <summary aria-label={`历史记录，共 ${conversations.length} 条`}>
               <ClockCounterClockwise weight="bold" />历史记录
@@ -164,11 +182,11 @@ export function ProjectHomePage() {
               {conversations.length === 0 ? <p className="agent-history-empty">暂无会话</p> : null}
               {conversations.map((conversation) => (
                 <div className={`agent-history-row${conversation.id === activeId ? " active" : ""}`} role="menuitem" key={conversation.id}>
-                  <button type="button" className="agent-history-open" onClick={(event) => {
+                  <button type="button" className="agent-history-open" disabled={sending} onClick={(event) => {
                     if (projectId) void loadConversation(projectId, conversation.id);
                     event.currentTarget.closest("details")?.removeAttribute("open");
                   }}><span>{conversation.title}</span><small>{conversation.status === "cancelled" ? "已结束" : new Date(conversation.updatedAt).toLocaleDateString()}</small></button>
-                  <button type="button" className="agent-history-delete" aria-label={`删除会话：${conversation.title}`} title="删除会话" onClick={(event) => {
+                  <button type="button" className="agent-history-delete" disabled={sending} aria-label={`删除会话：${conversation.title}`} title="删除会话" onClick={(event) => {
                     event.stopPropagation();
                     void removeConversation(conversation.id);
                   }}><Trash weight="bold" /></button>
@@ -198,7 +216,7 @@ export function ProjectHomePage() {
               {message.content ? (
                 message.role === "assistant" ? <AgentMarkdown content={message.content} /> : <p>{message.content}</p>
               ) : null}
-              {message.status === "failed" ? <div className="agent-failure"><span>{message.error || "本回合失败"}</span><button onClick={() => {
+              {message.status === "failed" ? <div className="agent-failure"><span>{message.error || "本回合失败"}</span><button disabled={sending || active?.status === "cancelled"} onClick={() => {
                 const index = messages.findIndex((item) => item.id === message.id); const previous = [...messages.slice(0, index)].reverse().find((item) => item.role === "user");
                 if (previous) void submitContent(previous.content);
               }}>重试</button></div> : null}

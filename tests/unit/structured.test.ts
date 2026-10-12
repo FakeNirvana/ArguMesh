@@ -37,11 +37,28 @@ describe("structured PDF page", () => {
       { type: "equation_interline", content: { math_content: "E=mc^2" }, bbox: [600, 500, 800, 530] },
     ]], "unused");
     expect(result.columns).toBe(2);
+    expect(result.blocks[1].bbox).toEqual([150, 200, 850, 400]);
     expect(result.blocks.map((block) => [block.kind, block.text, block.column])).toEqual([
       ["paragraph", "Findings.", 0],
       ["table", "Table 1: Results", "full"],
       ["formula", "E=mc^2", 1],
     ]);
+  });
+
+  it("keeps table pixels even when HTML recognition fails and preserves caption footnotes", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "argumesh-table-test-"));
+    try {
+      await mkdir(join(directory, "images"));
+      await writeFile(join(directory, "images", "table.png"), Buffer.from("local-table-pixels"));
+      const result = await normalizeMineruPage([[{ type: "table", bbox: [100, 200, 900, 400], content: {
+        image_source: { path: "images/table.png" }, table_caption: [{ content: "Table 1: Results" }],
+        table_footnote: [{ content: "* p < 0.05" }],
+      } }]], directory);
+      expect(result.blocks[0]).toMatchObject({ kind: "table", text: "Table 1: Results\n* p < 0.05", bbox: [100, 200, 900, 400] });
+      expect(result.blocks[0].image).toMatch(/^data:image\/png;base64,/);
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
   });
 
   it("keeps extracted figure pixels local while exposing caption text", async () => {

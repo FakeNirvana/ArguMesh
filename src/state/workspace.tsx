@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import * as api from "../api";
 import type { PageRect } from "../pdf/selection";
+import { canBatchConfirm } from "../matrix/review";
 
 /**
  * 后台同步队列:本地状态先写,API 调用失败时入队,顶部横幅提示重试。
@@ -246,6 +247,7 @@ interface WorkspaceContextValue extends WorkspaceData {
   deletePaper: (paperId: string) => void;
   addMatrix: (input: { projectId: string; name: string; description: string; paperIds: string[]; dimensionLabels: string[] }) => string;
   updateMatrixCell: (matrixId: string, cellKey: string, status: LocalMatrixCell["status"], locked: boolean) => void;
+  confirmMatrixCells: (matrixId: string, cellKeys: string[]) => void;
   markMatrixSynced: (matrixId: string) => void;
   addIdea: (input: Pick<LocalIdea, "title" | "summary" | "projectId">) => void;
   setIdeaStatus: (ideaId: string, status: IdeaStatus) => void;
@@ -725,6 +727,13 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
           ? { ...matrix, cells: { ...matrix.cells, [cellKey]: { ...matrix.cells[cellKey], status, locked } } }
           : matrix),
       }));
+    },
+    confirmMatrixCells(matrixId, cellKeys) {
+      const keys = new Set(cellKeys);
+      setData((current) => ({ ...current, matrices: current.matrices.map((matrix) => matrix.id !== matrixId ? matrix : {
+        ...matrix, cells: Object.fromEntries(Object.entries(matrix.cells).map(([key, cell]) =>
+          [key, keys.has(key) && canBatchConfirm(cell) ? { ...cell, status: "confirmed" as const, locked: true } : cell])),
+      }) }));
     },
     markMatrixSynced(matrixId) {
       setData((current) => ({ ...current, matrices: current.matrices.map((matrix) => matrix.id === matrixId ? { ...matrix, source: "server" } : matrix) }));

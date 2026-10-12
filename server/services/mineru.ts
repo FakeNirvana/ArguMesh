@@ -9,6 +9,8 @@ export interface ParsedPageBlock {
   kind: "paragraph" | "heading" | "table" | "image" | "formula";
   text: string;
   column: "full" | 0 | 1;
+  /** Top-left page coordinates, normalized to 0–1000 by MinerU. */
+  bbox?: [number, number, number, number];
   html?: string;
   image?: string;
   imageHash?: string;
@@ -29,7 +31,7 @@ let parseQueue: Promise<unknown> = Promise.resolve();
 
 function cachedPath(pdf: Uint8Array, page: number): string {
   const digest = createHash("sha256").update(pdf).digest("hex");
-  return join(cacheDirectory, `${digest}-p${page}-v1.json`);
+  return join(cacheDirectory, `${digest}-p${page}-v2.json`);
 }
 
 export async function getCachedPaperPage(pdf: Uint8Array, page: number): Promise<ParsedPage | null> {
@@ -64,6 +66,11 @@ function blockColumn(bbox: unknown): "full" | 0 | 1 {
   return bbox[2] <= 510 ? 0 : bbox[0] >= 490 ? 1 : "full";
 }
 
+function blockBounds(value: unknown): ParsedPageBlock["bbox"] {
+  if (!Array.isArray(value) || value.length !== 4 || !value.every((n) => typeof n === "number" && Number.isFinite(n) && n >= 0 && n <= 1000)) return undefined;
+  return value[0] < value[2] && value[1] < value[3] ? value as [number, number, number, number] : undefined;
+}
+
 /** MinerU output is untrusted PDF-derived data. Only plain text, a table string parsed without injection, and bounded local images leave this boundary. */
 export async function normalizeMineruPage(raw: unknown, outputDir: string): Promise<ParsedPage> {
   const page = Array.isArray(raw) && Array.isArray(raw[0]) ? raw[0] : raw;
@@ -73,26 +80,28 @@ export async function normalizeMineruPage(raw: unknown, outputDir: string): Prom
     const content = entry?.content;
     if (!content || typeof content !== "object") continue;
     const type = entry.type;
-    const column = blockColumn(entry.bbox);
+    const bbox = blockBounds(entry.bbox);
+    const column = blockColumn(bbox);
     if (type === "paragraph" || type === "title" || type === "page_footnote" || type === "list") {
       const text = partsText(content.paragraph_content ?? content.title_content ?? content.page_footnote_content ?? content.list_content);
-      if (text) blocks.push({ kind: type === "title" ? "heading" : "paragraph", text, column });
+      if (text) blocks.push({ kind: type === "title" ? "heading" : "paragraph", text, column, bbox });
       continue;
     }
     if (type === "table") {
-      const caption = partsText(content.table_caption);
+      const caption = [partsText(content.table_caption), partsText(content.table_footnote)].filter(Boolean).join("\n");
       const html = typeof content.html === "string" && content.html.length <= 60_000 ? content.html : "";
-      if (html) blocks.push({ kind: "table", text: caption, html, column, ...await imageData(content, outputDir) });
-      else if (caption) blocks.push({ kind: "paragraph", text: caption, column });
+      const image = await imageData(content, outputDir);
+      if (html || image.image) blocks.push({ kind: "table", text: caption, html, column, bbox, ...image });
+      else if (caption) blocks.push({ kind: "paragraph", text: caption, column, bbox });
       continue;
     }
     if (type === "image" || type === "chart") {
-      blocks.push({ kind: "image", text: partsText(content.image_caption ?? content.chart_caption), column, ...await imageData(content, outputDir) });
+      blocks.push({ kind: "image", text: [partsText(content.image_caption ?? content.chart_caption), partsText(content.image_footnote ?? content.chart_footnote)].filter(Boolean).join("\n"), column, bbox, ...await imageData(content, outputDir) });
       continue;
     }
     if (type === "equation" || type === "equation_interline" || type === "interline_equation" || type === "formula") {
       const text = typeof content.math_content === "string" ? content.math_content : typeof content.content === "string" ? content.content : partsText(content.equation_content);
-      blocks.push({ kind: "formula", text, column, ...await imageData(content, outputDir) });
+      blocks.push({ kind: "formula", text, column, bbox, ...await imageData(content, outputDir) });
     }
   }
   if (!blocks.length) throw new Error("MinerU 未识别出当前页内容");

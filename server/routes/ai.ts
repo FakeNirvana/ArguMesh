@@ -3,7 +3,8 @@ import { Hono } from "hono";
 import { z } from "zod";
 import { createDatabase } from "../db/client";
 import { aiSettings } from "../db/schema";
-import { getAiProviders, LOCAL_AI_ACCOUNT_ID } from "../services/ai";
+import { getAiProviders, LOCAL_AI_ACCOUNT_ID, resolveAiForRequest } from "../services/ai";
+import { AiRequestError, createStepFunCompletion, inferAiApiFormat } from "../services/stepfun";
 import type { AppBindings, AppEnv } from "../types";
 
 /**
@@ -44,6 +45,37 @@ aiRoutes.get("/ai/config", async (c) => {
   const db = createDatabase(c.env);
   const row = await db.select().from(aiSettings).where(eq(aiSettings.accountId, LOCAL_ID)).get();
   return c.json(configPayload(c.env, row ?? null));
+});
+
+/** POST /ai/config/test — 用实际生效的配置发送固定短消息，不发送研究内容或写入数据库。 */
+aiRoutes.post("/ai/config/test", async (c) => {
+  const resolution = await resolveAiForRequest(c.env, {});
+  if ("error" in resolution) return c.json({ error: resolution.error.code, message: resolution.error.message }, 400);
+  const { provider, model } = resolution;
+  const startedAt = Date.now();
+  try {
+    await createStepFunCompletion(c.env, [{ role: "user", content: "Connection check. Reply with OK only." }], {
+      providerConfig: provider, model, maxTokens: 128, thinkingMode: false, timeoutMs: 30_000, signal: c.req.raw.signal,
+    });
+    return c.json({ ok: true, model, provider: provider.label, apiFormat: inferAiApiFormat(provider.baseUrl), latencyMs: Date.now() - startedAt, checkedAt: new Date().toISOString() });
+  } catch (error) {
+    // 不回显厂商原始错误：其中可能包含请求头、密钥或其他敏感信息。
+    let message = "连接失败：无法访问模型服务，请检查 Base URL、网络与代理。";
+    if (error instanceof AiRequestError) {
+      const status = error.status;
+      if (status === 401 || status === 403) message = `连接失败（HTTP ${status}）：API Key 无效或没有该模型的访问权限。`;
+      else if (status === 429) message = "连接失败（HTTP 429）：服务限流或额度不足，请检查余额并稍后重试。";
+      else if (status === 404) message = "连接失败（HTTP 404）：接口路径或模型不存在，请检查 Base URL 与模型名称。";
+      else message = `连接失败（HTTP ${status}）：${status >= 500 ? "模型服务暂时不可用，请稍后重试。" : "服务拒绝请求，请检查模型名称与接口兼容性。"}`;
+    } else if (error instanceof Error && error.name === "TimeoutError") {
+      message = "连接超时：模型服务在 30 秒内未返回结果，请检查网络或稍后重试。";
+    } else if (error instanceof Error && error.name === "AbortError") {
+      message = "连接自检已取消。";
+    } else if (error instanceof Error && error.message === "AI returned an empty response") {
+      message = "连接失败：服务未返回有效的模型回复，请检查模型与接口兼容性。";
+    }
+    return c.json({ error: "AI_CONNECTION_FAILED", message }, 502);
+  }
 });
 
 /** PUT /ai/config — 保存全局 AI 配置(apiKey 留空则保留已保存的密钥)。 */

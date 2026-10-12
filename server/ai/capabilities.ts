@@ -28,6 +28,10 @@ import {
 
 // ───────────────────────── Output schemas（集中） ─────────────────────────
 
+export const readerTranslationOutputSchema = z.object({
+  translation: z.string().trim().min(1).max(32_000),
+});
+
 export const extractOutputSchema = z.object({
   kind: z.enum(["note", "claim", "evidence"]),
   title: z.string().min(1).max(200),
