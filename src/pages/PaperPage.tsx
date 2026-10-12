@@ -1,7 +1,7 @@
 import { BookOpenText, CheckCircle, FileText, FloppyDisk, Quotes, Sparkle, WarningCircle } from "@phosphor-icons/react";
 import { useEffect, useState, type FormEvent } from "react";
 import { Link, useParams } from "react-router-dom";
-import { generatePaperCard } from "../api";
+import { generatePaperCard, getAiModels } from "../api";
 import { EmptyState } from "../components/states";
 import { PageHeader } from "../components/PageHeader";
 import { extractPdfText } from "../pdf/document";
@@ -37,6 +37,14 @@ export function PaperPage() {
   const [genMeta, setGenMeta] = useState<GenMeta | null>(null);
   const [generating, setGenerating] = useState(false);
   const [genError, setGenError] = useState("");
+  const [currentModel, setCurrentModel] = useState("");
+  const [generationModel, setGenerationModel] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    void getAiModels().then(({ model }) => { if (!cancelled) setCurrentModel(model); });
+    return () => { cancelled = true; };
+  }, []);
 
   // 切换论文时把草稿/摘要/确认/来源状态重置为该论文本地卡片(如有)。
   useEffect(() => {
@@ -76,14 +84,18 @@ export function PaperPage() {
 
   const generate = async () => {
     setGenerating(true);
+    setGenerationModel(null);
     setGenError("");
     try {
-      const { text, source } = await resolveMaterial();
+      const [{ text, source }, { model }] = await Promise.all([resolveMaterial(), getAiModels()]);
+      setCurrentModel(model);
       if (text.trim().length < 100) {
         setGenError("可供 AI 依据的原文太短（<100 字），请上传完整 PDF 后重试。");
         return;
       }
-      const result = await generatePaperCard(paperId, { text, title: paper.title, authors: paper.authors, source });
+      setGenerationModel(model);
+      const result = await generatePaperCard(paperId, { text, title: paper.title, authors: paper.authors, source, model: model || undefined });
+      setCurrentModel(result.model);
       setDraft(result.card);
       setConfirmed(false);
       setGenMeta({ model: result.model, generatedAt: result.generatedAt, source: result.source, sources: result.sources });
@@ -117,10 +129,10 @@ export function PaperPage() {
     <div className="paper-workspace-grid">
       <form className="surface-card paper-card-editor" onSubmit={save}>
         <header><div><span className="eyebrow">Paper Card</span><h2>结构化论文资产</h2></div>
-          <button className="secondary-button" type="button" disabled={generating} onClick={() => void generate()} title={`依据浏览器中的 PDF/摘要文本生成草稿，模型：${genMeta?.model ?? "step-3.7-flash"}，约 1 次调用 · 3 万字输入上限`}><Sparkle />{generating ? "AI 生成中…（约 30 秒）" : "AI 生成草稿"}</button>
+          <button className="secondary-button" type="button" disabled={generating} onClick={() => void generate()} title={`依据浏览器中的 PDF/摘要文本生成草稿，模型：${(generating ? generationModel : currentModel) || "以设置页当前配置为准"}，约 1 次调用 · 3 万字输入上限`}><Sparkle />{generating ? "AI 生成中…（约 30 秒）" : "AI 生成草稿"}</button>
         </header>
         {genError ? <p className="form-error card-gen-error" role="alert"><WarningCircle weight="fill" />{genError}</p> : null}
-        {generating ? <p className="form-hint"><Sparkle /> 正在调用 {genMeta?.model ?? "step-3.7-flash"} 依据原文生成草稿，完成后请对照原文审阅确认。</p> : null}
+        {generating ? <p className="form-hint" role="status" aria-live="polite"><Sparkle /> {generationModel === null ? "正在准备原文并读取当前模型配置…" : `正在调用 ${generationModel || "当前配置的模型"} 依据原文生成草稿，完成后请对照原文审阅确认。`}</p> : null}
         <label className="paper-abstract-field"><span>论文摘要{abstract.trim().length >= 100 ? <em className="ai-field-badge">AI 生成可用</em> : <em className="ai-field-badge">摘要过短，AI 生成不可用</em>}</span><textarea name="abstract" value={abstract} onChange={(event) => setAbstract(event.target.value)} placeholder="粘贴论文摘要（≥100 字）。没有 PDF 时，AI 生成会依据摘要进行。" rows={4} /></label>
         {FIELDS.map((field) => <label key={field.key}><span>{field.label}{genMeta ? <em className="ai-field-badge">AI 草稿</em> : null}</span><textarea name={field.key} value={draft[field.key]} onChange={(event) => setDraft((current) => ({ ...current, [field.key]: event.target.value }))} placeholder={field.hint} /></label>)}
         {genMeta ? <details className="ai-evidence-panel" open><summary>AI 草稿依据 · {genMeta.model} · {new Date(genMeta.generatedAt).toLocaleString("zh-CN")} · {genMeta.source}</summary>{FIELDS.map((field) => <p key={field.key}><strong>{field.label}</strong><span>{genMeta.sources[field.key] || "文中未说明"}</span></p>)}</details> : null}

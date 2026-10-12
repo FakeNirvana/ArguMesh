@@ -49,6 +49,7 @@ export interface PageTranslationBlock {
   source: string;
   translation: string;
   model: string;
+  generatedAt?: string;
   recognizedText?: string;
 }
 
@@ -205,7 +206,7 @@ function readPageTranslationRecord(value: unknown): PageTranslationRecord | null
       !!block && typeof block === "object"
       && typeof (block as PageTranslationBlock).source === "string"
       && typeof (block as PageTranslationBlock).translation === "string")
-    .map((block) => ({ index: block.index, source: block.source, translation: block.translation, model: block.model ?? "", recognizedText: typeof block.recognizedText === "string" ? block.recognizedText : undefined }));
+    .map((block) => ({ index: block.index, source: block.source, translation: block.translation, model: block.model ?? "", generatedAt: typeof block.generatedAt === "string" ? block.generatedAt : undefined, recognizedText: typeof block.recognizedText === "string" ? block.recognizedText : undefined }));
   return { source: record.source, blocks };
 }
 

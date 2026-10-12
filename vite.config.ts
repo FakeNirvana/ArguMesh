@@ -1,8 +1,9 @@
 import react from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
+import { localOcrAssets } from "./scripts/ocr-assets";
 
 export default defineConfig({
-  plugins: [react()],
+  plugins: [react(), localOcrAssets()],
   server: {
     host: "0.0.0.0",
     allowedHosts: ["terminal.local"],

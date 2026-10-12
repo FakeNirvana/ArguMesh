@@ -27,6 +27,13 @@ interface AnthropicResponse {
   };
 }
 
+export class AiRequestError extends Error {
+  constructor(message: string, readonly status: number) {
+    super(message);
+    this.name = "AiRequestError";
+  }
+}
+
 export function inferAiApiFormat(baseUrl: string): "openai" | "anthropic" {
   try {
     return /(^|\/)anthropic$/i.test(new URL(baseUrl).pathname.replace(/\/+$/, "")) ? "anthropic" : "openai";
@@ -79,7 +86,7 @@ export async function createStepFunCompletion(
 
   const payload = (await response.json().catch(() => null)) as StepFunResponse | null;
   if (!response.ok) {
-    throw new Error(payload?.error?.message ?? `AI request failed (${response.status})`);
+    throw new AiRequestError(payload?.error?.message ?? `AI request failed (${response.status})`, response.status);
   }
 
   const content = payload?.choices?.[0]?.message?.content?.trim();
@@ -117,7 +124,7 @@ async function createAnthropicCompletion(
 
   const payload = (await response.json().catch(() => null)) as AnthropicResponse | null;
   if (!response.ok) {
-    throw new Error(payload?.error?.message ?? `AI request failed (${response.status})`);
+    throw new AiRequestError(payload?.error?.message ?? `AI request failed (${response.status})`, response.status);
   }
   const content = payload?.content
     ?.filter((block) => block.type === "text" && block.text)

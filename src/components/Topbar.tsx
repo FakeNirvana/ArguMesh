@@ -11,6 +11,7 @@ interface TopbarProps {
   progress: number;
   aiMessage: string;
   extracting: boolean;
+  extractionDisabled?: boolean;
   onRunExtraction: () => void;
   loadError: string | null;
   onRetry: () => void;
@@ -27,6 +28,7 @@ export function Topbar({
   progress,
   aiMessage,
   extracting,
+  extractionDisabled = false,
   onRunExtraction,
   loadError,
   onRetry,
@@ -90,7 +92,7 @@ export function Topbar({
           type="button"
           className="primary"
           onClick={onRunExtraction}
-          disabled={extracting}
+          disabled={extracting || extractionDisabled}
         >
           <Play weight="fill" />
           {extracting ? "正在规划" : "继续 AI 提取"}

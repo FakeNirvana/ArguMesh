@@ -33,6 +33,8 @@ export type PiAgentStreamEvent =
 interface SessionState {
   turn: AgentTurnInput;
   recordedActions: unknown[];
+  signal: AbortSignal;
+  writeStarted: boolean;
 }
 
 interface CachedSession {
@@ -107,7 +109,11 @@ async function runDomainAction(
   state: SessionState,
   action: Parameters<typeof executeWhitelistedAgentAction>[2],
 ) {
+  state.signal.throwIfAborted();
+  if (state.writeStarted) return { content: [{ type: "text" as const, text: "本回合已执行一个写入动作，请在下一回合继续。" }], details: {} };
+  state.writeStarted = true;
   const context = await assembleProjectContext(env, state.turn.projectId);
+  state.signal.throwIfAborted();
   if (!context) {
     return { content: [{ type: "text" as const, text: "PROJECT_NOT_FOUND" }], details: {} };
   }
@@ -356,7 +362,7 @@ function mapSessionEvent(event: AgentSessionEvent): PiAgentStreamEvent | null {
       detail: typeof event.result === "string" ? event.result.slice(0, 500) : undefined,
     };
   }
-  if (event.type === "agent_end") return { type: "agent_end" };
+  // SDK agent_end can precede automatic retries/compaction; only emit our final end after idle.
   return null;
 }
 
@@ -375,9 +381,8 @@ async function getOrCreateSession(
   state: SessionState,
 ) {
   const existing = sessionCache.get(turn.conversationId);
-  if (existing && existing.projectId === turn.projectId) {
-    existing.state.turn = turn;
-    existing.state.recordedActions = state.recordedActions;
+  if (existing && existing.projectId === turn.projectId && existing.session.isIdle) {
+    Object.assign(existing.state, state);
     existing.unsubscribe();
     const unsubscribe = existing.session.subscribe((event) => {
       const mapped = mapSessionEvent(event);
@@ -394,6 +399,7 @@ async function getOrCreateSession(
   }
 
   const bridge = await createPiModelBridge(resolution.provider, resolution.model);
+  state.signal.throwIfAborted();
   const settingsManager = SettingsManager.inMemory({
     compaction: { enabled: true },
     retry: { enabled: true, maxRetries: 2 },
@@ -409,6 +415,7 @@ async function getOrCreateSession(
         "Call project_context before making project-specific claims when unsure.",
         "Use web_search only for external literature/web facts missing from the project; label those hits as external and unverified.",
         "Writes must stay drafts via the domain tools listed below; never claim confirmation or silent overwrite.",
+        "Execute at most one write action per user turn; ask the user to continue in another turn for additional writes.",
         "Available write tools: insight_create_draft, research_question_create_draft, research_question_link_evidence,",
         "experiment_design_create_draft, ablation_design_add, result_analysis_create_draft,",
         "paper_patch_propose, bibliography_entry_propose, latex_compile.",
@@ -418,6 +425,16 @@ async function getOrCreateSession(
       ].join("\n"),
   });
   await resourceLoader.reload();
+  state.signal.throwIfAborted();
+
+  // Recreated sessions recover bounded completed history from SQLite, never from failed attempts.
+  const sessionManager = SessionManager.inMemory();
+  for (const entry of turn.history) {
+    if (entry.role === "user") sessionManager.appendMessage({ role: "user", content: entry.content, timestamp: Date.now() });
+    else sessionManager.appendMessage({ role: "assistant", content: [{ type: "text", text: entry.content }],
+      api: bridge.model.api, provider: bridge.model.provider, model: bridge.model.id, stopReason: "stop", timestamp: Date.now(),
+      usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } } });
+  }
 
   const { session } = await createAgentSession({
     cwd: process.cwd(),
@@ -428,9 +445,10 @@ async function getOrCreateSession(
     tools: [...TOOL_NAMES],
     customTools: buildDomainTools(env, state),
     resourceLoader,
-    sessionManager: SessionManager.inMemory(),
+    sessionManager,
     settingsManager,
   });
+  if (state.signal.aborted) { session.dispose(); state.signal.throwIfAborted(); }
 
   const unsubscribe = session.subscribe((event) => {
     const mapped = mapSessionEvent(event);
@@ -495,35 +513,54 @@ export async function runPiAgentTurn(
   env: AppBindings,
   turn: AgentTurnInput,
   onEvent: (event: PiAgentStreamEvent) => void,
+  signal: AbortSignal = AbortSignal.timeout(300_000),
 ): Promise<RunPiAgentTurnResult> {
-  const state: SessionState = { turn, recordedActions: [] };
-  const session = await getOrCreateSession(env, turn, onEvent, state);
-  const resolution = await resolveAiForRequest(env, {});
-  if ("error" in resolution) {
-    throw new AgentConfigurationError(resolution.error.code, resolution.error.message);
-  }
-
+  const state: SessionState = { turn, recordedActions: [], signal, writeStarted: false };
+  let session: AgentSession | undefined;
+  const discard = () => {
+    if (session && sessionCache.get(turn.conversationId)?.session === session) disposePiAgentSession(turn.conversationId);
+  };
+  let removeAbort = () => {};
+  const interrupted = new Promise<never>((_resolve, reject) => {
+    const abort = () => { discard(); reject(signal.reason); };
+    if (signal.aborted) abort();
+    else signal.addEventListener("abort", abort, { once: true });
+    removeAbort = () => signal.removeEventListener("abort", abort);
+  });
+  let failed = true;
   try {
-    await session.prompt(turn.message);
-  } catch (error) {
-    const message = error instanceof Error ? error.message : "Pi Agent turn failed";
-    onEvent({ type: "error", code: "PI_AGENT_FAILED", message });
-    throw error;
-  }
+    session = await Promise.race([getOrCreateSession(env, turn, onEvent, state), interrupted]);
+    signal.throwIfAborted();
+    const resolution = await resolveAiForRequest(env, {});
+    if ("error" in resolution) {
+      throw new AgentConfigurationError(resolution.error.code, resolution.error.message);
+    }
 
-  const assistantMessages = session.messages.filter((message) => message.role === "assistant");
-  const last = assistantMessages.at(-1);
-  let reply = "";
-  if (last && "content" in last && Array.isArray(last.content)) {
-    reply = last.content
-      .filter((block): block is { type: "text"; text: string } => block.type === "text" && typeof block.text === "string")
-      .map((block) => block.text)
-      .join("\n")
-      .trim();
-  }
-  if (!reply) reply = "（本回合没有文字回复）";
+    await Promise.race([session.prompt(turn.message), interrupted]);
+    await Promise.race([session.waitForIdle(), interrupted]);
+    signal.throwIfAborted();
 
-  const citations = citationsFromActions(state.recordedActions);
-  onEvent({ type: "agent_end" });
-  return { reply, model: resolution.model, actions: state.recordedActions, citations };
+    const assistantMessages = session.messages.filter((message) => message.role === "assistant");
+    const last = assistantMessages.at(-1);
+    if (last && "stopReason" in last && (last.stopReason === "error" || last.stopReason === "aborted")) {
+      throw new Error("errorMessage" in last && typeof last.errorMessage === "string" ? last.errorMessage : "模型调用失败，请检查连接后重试。");
+    }
+    let reply = "";
+    if (last && "content" in last && Array.isArray(last.content)) {
+      reply = last.content
+        .filter((block): block is { type: "text"; text: string } => block.type === "text" && typeof block.text === "string")
+        .map((block) => block.text)
+        .join("\n")
+        .trim();
+    }
+    if (!reply) throw new Error("模型未返回文字回复，请重试或在设置页进行连接自检。");
+
+    const citations = citationsFromActions(state.recordedActions);
+    onEvent({ type: "agent_end" });
+    failed = false;
+    return { reply, model: resolution.model, actions: state.recordedActions, citations };
+  } finally {
+    removeAbort();
+    if (failed) discard();
+  }
 }

@@ -216,6 +216,41 @@ matrixRoutes.patch("/evidence/:evidenceId", async (c) => {
   return c.json({ id: evidenceId, status: parsed.data.status, locked });
 });
 
+const batchConfirmSchema = z.object({
+  paperId: z.string().trim().min(1).max(160).optional(),
+  evidenceIds: z.array(z.string().trim().min(1).max(500)).min(1).max(2_500),
+}).strict();
+
+matrixRoutes.post("/matrices/:matrixId/confirm", async (c) => {
+  const parsed = batchConfirmSchema.safeParse(await c.req.json().catch(() => null));
+  if (!parsed.success) return c.json({ error: "INVALID_CONFIRMATION", message: "批量确认范围不正确" }, 400);
+  const db = createDatabase(c.env);
+  const matrixId = c.req.param("matrixId");
+  const matrix = await db.select().from(matrices).where(eq(matrices.id, matrixId)).get();
+  if (!matrix) return c.json({ error: "MATRIX_NOT_FOUND", message: "矩阵不存在" }, 404);
+  const ids = [...new Set(parsed.data.evidenceIds)];
+  const result = await db.transaction(async (tx) => {
+    const rows = await tx.select({ cell: evidenceCells }).from(evidenceCells)
+      .innerJoin(dimensions, and(eq(dimensions.id, evidenceCells.dimensionId), eq(dimensions.matrixId, matrixId)))
+      .innerJoin(matrixPapers, and(eq(matrixPapers.paperId, evidenceCells.paperId), eq(matrixPapers.matrixId, matrixId)))
+      .where(and(eq(evidenceCells.matrixId, matrixId), eq(evidenceCells.projectId, matrix.projectId),
+        inArray(evidenceCells.id, ids), parsed.data.paperId ? eq(evidenceCells.paperId, parsed.data.paperId) : undefined));
+    if (rows.length !== ids.length) return null;
+    // Recheck eligibility inside the transaction; never turn placeholders or conflicts into verified evidence.
+    const eligible = rows.map(({ cell }) => cell).filter((cell) => cell.status === "draft" && !cell.locked
+      && Boolean(cell.claim.trim() && cell.sourceExcerpt.trim()) && Boolean(cell.value.trim())
+      && !/^(待提取|待提取证据|未找到|—|-)$/.test(cell.value.trim()) && Boolean(cell.sourcePage.trim())
+      && !/^(—|-|待定位|待提取|未找到|未知)$/.test(cell.sourcePage.trim()));
+    if (eligible.length) await tx.update(evidenceCells)
+      .set({ status: "confirmed", locked: true, updatedAt: new Date().toISOString() })
+      .where(and(eq(evidenceCells.matrixId, matrixId), inArray(evidenceCells.id, eligible.map((cell) => cell.id)),
+        eq(evidenceCells.status, "draft"), eq(evidenceCells.locked, false)));
+    return { updatedIds: eligible.map((cell) => cell.id), skipped: ids.length - eligible.length };
+  });
+  if (!result) return c.json({ error: "EVIDENCE_OUT_OF_SCOPE", message: "证据已不在本次确认范围内，请重新加载矩阵" }, 400);
+  return c.json(result);
+});
+
 const evidenceContentSchema = z.object({
   value: z.string().trim().min(1).max(2_000),
   status: z.enum(["draft", "confirmed", "conflict", "missing"]),

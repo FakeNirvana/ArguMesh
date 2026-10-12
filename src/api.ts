@@ -70,15 +70,15 @@ export function authenticatedHeaders(extra?: HeadersInit) {
   return new Headers(extra);
 }
 
-/** 从后端取当前 AI 模型名 + 可用厂商列表(健康检查无需鉴权)。失败时回退空。 */
+/** 获取实际生效的模型配置：设置页的全局配置优先，未配置时使用环境厂商。失败时回退空。 */
 export async function getAiModels(): Promise<{ model: string; models: string[]; providers: AiProviderInfo[] }> {
   try {
-    const response = await fetch("/api/health");
-    if (!response.ok) return { model: "", models: [], providers: [] };
-    const raw = await response.text();
-    if (!raw.trim()) return { model: "", models: [], providers: [] };
-    const payload = JSON.parse(raw) as { model?: string; models?: string[]; providers?: AiProviderInfo[] };
-    return { model: payload.model ?? "", models: payload.models ?? [], providers: payload.providers ?? [] };
+    const config = await getAiConfig();
+    const providers = config.configured
+      ? [{ id: "account", label: "自定义配置", models: config.model ? [config.model] : [] }]
+      : config.envProviders;
+    const models = providers[0]?.models ?? [];
+    return { model: models[0] ?? "", models, providers };
   } catch {
     return { model: "", models: [], providers: [] };
   }
@@ -110,6 +110,19 @@ export async function deleteAiConfig(): Promise<{ cleared: true }> {
   return parseResponse(await fetch("/api/ai/config", { method: "DELETE", headers: authenticatedHeaders() }));
 }
 
+export interface AiConnectionCheck {
+  ok: true;
+  model: string;
+  provider: string;
+  apiFormat: "openai" | "anthropic";
+  latencyMs: number;
+  checkedAt: string;
+}
+
+export async function testAiConnection(signal?: AbortSignal): Promise<AiConnectionCheck> {
+  return parseResponse(await fetch("/api/ai/config/test", { method: "POST", signal }));
+}
+
 async function parseResponse<T>(response: Response): Promise<T> {
   if (response.status === 401) throw new Error("Unauthorized");
   const raw = await response.text();
@@ -139,6 +152,13 @@ async function parseResponse<T>(response: Response): Promise<T> {
 
 export async function getMatrixById(matrixId: string): Promise<MatrixResponse> {
   return parseResponse<MatrixResponse>(await fetch(`/api/matrices/${encodeURIComponent(matrixId)}`, { headers: authenticatedHeaders() }));
+}
+
+export async function confirmMatrixEvidence(matrixId: string, evidenceIds: string[], paperId?: string) {
+  return parseResponse<{ updatedIds: string[]; skipped: number }>(await fetch(`/api/matrices/${encodeURIComponent(matrixId)}/confirm`, {
+    method: "POST", headers: authenticatedHeaders({ "content-type": "application/json" }),
+    body: JSON.stringify({ evidenceIds, paperId }),
+  }));
 }
 
 export async function saveMatrix(input: { id: string; projectId: string; name: string; description: string; paperIds: string[]; dimensions: Array<{ id: string; label: string }> }) {
@@ -249,7 +269,7 @@ export async function extractMatrix(matrixId: string, input: { papers: Array<{ i
 }
 
 export async function translateSelection(input: { text: string; targetLanguage: "中文" | "English"; paperTitle: string; page: number; model?: string; provider?: string; sourceType?: "figure-ocr" | "table" }, signal?: AbortSignal) {
-  return parseResponse<{ translation: string; model: string }>(await fetch("/api/reader/translate", {
+  return parseResponse<{ translation: string; model: string; generatedAt: string }>(await fetch("/api/reader/translate", {
     method: "POST", headers: authenticatedHeaders({ "content-type": "application/json" }), body: JSON.stringify(input), signal,
   }));
 }
@@ -1156,6 +1176,7 @@ export async function getAiConversation(
 function mapResearchAgentClientError(cause: unknown): string {
   const raw = cause instanceof Error ? cause.message.trim() : "";
   if (!raw) return "";
+  if (/agent is already processing|streamingBehavior|AGENT_TURN_BUSY/i.test(raw)) return "上一回合仍在处理，请稍后重试；连接中断后可重新加载会话再继续。";
   if (/network error|failed to fetch|fetch failed|econnreset|econnrefused|socket hang up/i.test(raw)) {
     return "网络连接中断（开发热重载、Vite 代理断开，或模型 API 不可达）。请确认 API 仍在运行后重试。";
   }
@@ -1174,35 +1195,33 @@ async function parseSseAiMessage(
   const decoder = new TextDecoder();
   let buffer = "";
   let donePayload: { message: AiMessage; actions?: AiAction[]; mode?: string } | null = null;
-  let streamError: string | null = null;
-
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    buffer += decoder.decode(value, { stream: true });
-    const chunks = buffer.split("\n\n");
-    buffer = chunks.pop() ?? "";
-    for (const chunk of chunks) {
-      const lines = chunk.split("\n");
-      let eventName = "message";
-      const dataLines: string[] = [];
-      for (const line of lines) {
-        if (line.startsWith("event:")) eventName = line.slice(6).trim();
-        else if (line.startsWith("data:")) dataLines.push(line.slice(5).trim());
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      buffer = buffer.replace(/\r\n/g, "\n");
+      const chunks = buffer.split("\n\n");
+      buffer = chunks.pop() ?? "";
+      for (const chunk of chunks) {
+        const lines = chunk.split("\n");
+        let eventName = "message";
+        const dataLines: string[] = [];
+        for (const line of lines) {
+          if (line.startsWith("event:")) eventName = line.slice(6).trim();
+          else if (line.startsWith("data:")) dataLines.push(line.slice(5).trim());
+        }
+        if (!dataLines.length) continue;
+        const payload = JSON.parse(dataLines.join("\n")) as Record<string, unknown>;
+        onEvent?.({ type: eventName, ...payload });
+        if (eventName === "done") {
+          donePayload = payload as { message: AiMessage; actions?: AiAction[]; mode?: string };
+        }
+        if (eventName === "error") throw new Error(String(payload.message ?? payload.code ?? "Pi Agent 失败"));
       }
-      if (!dataLines.length) continue;
-      const payload = JSON.parse(dataLines.join("\n")) as Record<string, unknown>;
-      onEvent?.({ type: eventName, ...payload });
-      if (eventName === "done") {
-        donePayload = payload as { message: AiMessage; actions?: AiAction[]; mode?: string };
-      }
-      if (eventName === "error") {
-        streamError = String(payload.message ?? payload.code ?? "Pi Agent 失败");
-      }
+      if (donePayload) break;
     }
-  }
-
-  if (streamError) throw new Error(streamError);
+  } finally { await reader.cancel().catch(() => {}); reader.releaseLock(); }
   if (!donePayload?.message) {
     throw new Error("流式连接中断，未收到完整回复。请重试；若刚改过代码，可能是热重载断开了连接。");
   }
@@ -1213,11 +1232,14 @@ async function parseSseAiMessage(
   };
 }
 
+export class AgentTurnBusyError extends Error {}
+
 export async function sendAiMessage(
   projectId: string,
   conversationId: string,
   content: string,
   onEvent?: (event: { type: string; [key: string]: unknown }) => void,
+  signal?: AbortSignal,
 ): Promise<{ message: AiMessage; action: AiAction | null; mode: string }> {
   let response: Response;
   try {
@@ -1225,11 +1247,16 @@ export async function sendAiMessage(
       method: "POST",
       headers: authenticatedHeaders({ "content-type": "application/json" }),
       body: JSON.stringify({ content }),
+      signal,
     });
   } catch (cause) {
     throw new Error(mapResearchAgentClientError(cause) || "网络连接中断，请重试。");
   }
   if (!response.ok && !(response.headers.get("content-type") ?? "").includes("text/event-stream")) {
+    if (response.status === 409) {
+      const payload = await response.clone().json().catch(() => null) as { error?: string; message?: string } | null;
+      if (payload?.error === "AGENT_TURN_BUSY") throw new AgentTurnBusyError(payload.message ?? "上一回合仍在处理，请稍后重试。");
+    }
     return parseResponse(response);
   }
   if (!response.ok) throw new Error(`RESEARCH_AGENT_HTTP_${response.status}`);

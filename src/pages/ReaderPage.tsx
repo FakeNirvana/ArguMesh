@@ -1,18 +1,22 @@
 import type { ParserProgress } from "../../server/services/mineru-runtime";
-import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent } from "react";
-import { useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, ArrowRight, ArrowsClockwise, BookOpenText, BookmarkSimple, Check, FilePdf, ListBullets, MagnifyingGlass, Minus, NotePencil, Plus, Quotes, Scan, Sparkle, Trash, Translate, UploadSimple, WarningCircle, X } from "@phosphor-icons/react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent } from "react";
+import { useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { ArrowLeft, ArrowsClockwise, BookOpenText, BookmarkSimple, Check, FilePdf, ListBullets, MagnifyingGlass, Minus, NotePencil, Plus, Quotes, Scan, Sparkle, Trash, Translate, UploadSimple, WarningCircle, X } from "@phosphor-icons/react";
 import { getDocument, type PDFDocumentProxy, type PDFPageProxy } from "pdfjs-dist";
 import { askReader, cancelReaderPageParse, downloadPaperFile, getAiConfig, getAiModels, getReaderPageParseStatus, parseReaderPage, syncPaper, syncProject, translateSelection, uploadPaperFile } from "../api";
 import type { ParsedPage } from "../../server/services/mineru";
-import { PdfPage, type PdfHighlight, type SelectionPayload } from "../components/PdfPage";
+import type { SelectionPayload } from "../components/PdfPage";
+import { ContinuousPage, ContinuousPdfPage } from "../components/ContinuousPage";
+import { ContinuousTranslationPage } from "../components/TranslationSheet";
+import { pageScrollTop, readPageScroll, type PageScrollPosition } from "../pdf/scroll";
+import { compareCacheLanguage, readTranslationPage, targetLanguageFor, validCachedTranslation } from "../pdf/translationPage";
 import { EmptyState, LoadingState } from "../components/states";
 import { pickBubbleAnchor, type PageRect } from "../pdf/selection";
 import { getPageTranslations, getPaperPageTexts, getPaperPdf, savePageTranslations, savePaperPdf } from "../storage/paperFiles";
 import { useWorkspace } from "../state/workspace";
-import { currentPageText, extractPdfText, inspectPdf, recognizeFigureText, recognizePdfPage, sha256File } from "../pdf/document";
-import { splitPageIntoBlocks } from "../pdf/blocks";
-import { lockTableNumbers, parseStructuredTable, preservesTableNumbers, shouldTranslateTableCell } from "../pdf/structured";
+import { currentPageText, extractPdfText, inspectPdf, recognizePdfPage, sha256File } from "../pdf/document";
+import { structuredCompareBlocks, textCompareBlocks, type CompareBlock } from "../pdf/translation";
+import { translatePageBlocks } from "../pdf/translatePage";
 
 const MAX_FILE_SIZE = 25 * 1024 * 1024;
 // 与 server/routes/reader.ts translateSchema 的 max(8_000) 对齐:超长选区(整页/整段)
@@ -24,27 +28,6 @@ const COMPARE_CONCURRENCY = 3;
 // 连续失败这么多段就停掉整页:第一段可能是偶发,第二段基本是配置/网络问题。
 const COMPARE_MAX_CONSECUTIVE_FAILURES = 2;
 
-/** 双语对照的一个段落:原文 + 翻译状态机。 */
-interface CompareBlock {
-  source: string;
-  kind: "heading" | "paragraph" | "table-caption" | "table-cell" | "image" | "formula";
-  column: "full" | 0 | 1;
-  continuation: boolean;
-  leadIn: boolean;
-  status: "idle" | "pending" | "done" | "error";
-  translation: string;
-  model?: string;
-  error?: string;
-  tableId?: number;
-  row?: number;
-  col?: number;
-  rowSpan?: number;
-  colSpan?: number;
-  image?: string;
-  recognizedText?: string;
-  static?: boolean;
-}
-
 interface DocumentTranslationJob {
   stage: "parsing" | "translating" | "cancelling" | "done" | "cancelled" | "error";
   page: number;
@@ -54,15 +37,9 @@ interface DocumentTranslationJob {
   totalBlocks: number;
   model: string;
   error?: string;
+  notice?: string;
 }
 
-
-// Layout-aware segments must not overwrite translations cached by the old flat-text splitter.
-const compareCacheLanguage = (language: "中文" | "English", parser: "layout" | "mineru") => `${language}:${parser === "mineru" ? "mineru-v1" : "layout-v2"}`;
-// 旧版把请求元数据序列化进 user prompt，少数模型会把整个请求对象当成译文回显。
-function validCachedTranslation(translation: string): boolean {
-  return !(/"targetLanguage"\s*:/.test(translation) && /"paperTitle"\s*:/.test(translation));
-}
 
 async function parseDocumentPageWithRetry(paperId: string, page: number, signal: AbortSignal): Promise<ParsedPage> {
   for (let attempt = 0; ; attempt += 1) {
@@ -78,62 +55,28 @@ async function parseDocumentPageWithRetry(paperId: string, page: number, signal:
   }
 }
 
-function structuredCompareBlocks(parsed: ParsedPage): CompareBlock[] {
-  const blocks: CompareBlock[] = [];
-  const add = (source: string, kind: CompareBlock["kind"], column: CompareBlock["column"], extra: Partial<CompareBlock> = {}) => {
-    blocks.push({ source, kind, column, continuation: false, leadIn: false, status: "idle", translation: "", ...extra });
-  };
-  parsed.blocks.forEach((block, tableId) => {
-    if (block.kind === "table") {
-      const rows = parseStructuredTable(block.html ?? "");
-      if (block.text) add(block.text, "table-caption", block.column, { tableId });
-      rows.forEach((row, rowIndex) => row.forEach((cell, col) => {
-        const translate = shouldTranslateTableCell(cell.text);
-        add(cell.text, "table-cell", block.column, {
-          tableId, row: rowIndex, col, rowSpan: cell.rowSpan, colSpan: cell.colSpan,
-          status: translate ? "idle" : "done", translation: translate ? "" : cell.text,
-          model: translate ? undefined : "原文数据", static: !translate,
-        });
-      }));
-      if (!rows.length) add(`表格图像:${block.imageHash ?? tableId}`, "image", block.column, { image: block.image, status: block.image ? "idle" : "done", translation: block.image ? "" : "表格结构无法识别，请查看左侧原文。", model: "MinerU", static: !block.image });
-      return;
-    }
-    if (block.kind === "image") {
-      add(`图像:${block.imageHash ?? tableId}`, "image", block.column, { image: block.image, status: block.image ? "idle" : "done", translation: block.image ? "" : "原图不可预览，请查看左侧 PDF。", model: "MinerU", static: !block.image });
-      if (block.text) add(block.text, "paragraph", block.column);
-      return;
-    }
-    if (block.kind === "formula") {
-      add(block.text || `公式:${block.imageHash ?? tableId}`, "formula", block.column, { image: block.image, status: "done", translation: block.text, model: "原文公式", static: true });
-      return;
-    }
-    splitPageIntoBlocks(block.text, 1_400).forEach((source, index) => add(source, block.kind === "heading" ? "heading" : "paragraph", block.column, { continuation: index > 0 }));
-  });
-  return blocks;
-}
-
-/** 中文论文 → 译成英文,英文论文 → 译成中文。划词气泡与双语对照必须用同一套判断。 */
-function targetLanguageFor(text: string): "中文" | "English" {
-  return /[\u4e00-\u9fff]/.test(text) ? "English" : "中文";
-}
-
 export function ReaderPage() {
   const { projectId = "", paperId = "" } = useParams<{ projectId: string; paperId: string }>();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { projects, papers, readerAnswers, readerExcerpts, readerPositions, settings, setPaperFile, updatePaper, addReaderAnswer, addReaderExcerpt, addKnowledge, updateReaderExcerpt, deleteReaderExcerpt, setReaderPosition } = useWorkspace();
   const project = projects.find((item) => item.id === projectId);
   const paper = papers.find((item) => item.id === paperId && item.projectIds.includes(projectId));
   const libraryPath = project ? `/projects/${encodeURIComponent(project.id)}/library` : "/library";
   const [document, setDocument] = useState<PDFDocumentProxy | null>(null);
+  const [pageSize, setPageSize] = useState({ width: 595, height: 842 });
+  const restoredDocumentRef = useRef<PDFDocumentProxy | null>(null);
   const [pdfPage, setPdfPage] = useState<PDFPageProxy | null>(null);
   const savedPosition = readerPositions.find((item) => item.projectId === projectId && item.paperId === paperId);
-  const [pageNumber, setPageNumber] = useState(savedPosition?.page ?? 1);
+  const requestedPage = Number(searchParams.get("page"));
+  const [pageNumber, setPageNumber] = useState(Number.isSafeInteger(requestedPage) && requestedPage > 0 ? requestedPage : savedPosition?.page ?? 1);
   const [scale, setScale] = useState(savedPosition?.scale ?? 1.15);
   const [selection, setSelection] = useState("");
   // 划词气泡:rects 是与缩放无关的 PDF 页面单位矩形(用于在原文上重绘高亮),
   // selectionPage 记下这批矩形属于哪一页,翻页后存量的矩形不再复用。
   const [selectionRects, setSelectionRects] = useState<PageRect[]>([]);
   const [selectionPage, setSelectionPage] = useState(0);
+  const selectedPage = selectionPage || pageNumber;
   const [bubbleAnchor, setBubbleAnchor] = useState<{ top: number; left: number; placement: "above" | "below" } | null>(null);
   const [question, setQuestion] = useState("");
   const [answer, setAnswer] = useState("");
@@ -148,8 +91,12 @@ export function ReaderPage() {
   const [translating, setTranslating] = useState(false);
   const [translation, setTranslation] = useState("");
   // 同一句译过一次就不再打 AI:划词连点/反复选中同一句时零成本。
-  const translationCache = useRef(new Map<string, string>());
+  const translationCache = useRef(new Map<string, { translation: string; model: string; generatedAt: string }>());
   const [ocrProgress, setOcrProgress] = useState<number | null>(null);
+  const [ocrStage, setOcrStage] = useState<"rendering" | "loading" | "recognizing">("rendering");
+  const ocrRunRef = useRef<AbortController | null>(null);
+  const pageRunRef = useRef<AbortController | null>(null);
+  const [pageTranslationActive, setPageTranslationActive] = useState(false);
   const [outlineOpen, setOutlineOpen] = useState(false);
   const [editingExcerptId, setEditingExcerptId] = useState("");
   const [error, setError] = useState("");
@@ -161,6 +108,7 @@ export function ReaderPage() {
   const [compareBlocks, setCompareBlocks] = useState<CompareBlock[]>([]);
   const [compareColumns, setCompareColumns] = useState<1 | 2>(1);
   const [compareParser, setCompareParser] = useState<"layout" | "mineru">("layout");
+  const [linkedScroll, setLinkedScroll] = useState(true);
   const [documentJob, setDocumentJob] = useState<DocumentTranslationJob | null>(null);
   const [parserProgress, setParserProgress] = useState<ParserProgress | null>(null);
   const parsingPage = documentJob?.stage === "parsing" ? documentJob.page : null;
@@ -200,14 +148,32 @@ export function ReaderPage() {
   const stageRef = useRef<HTMLDivElement>(null);
   const compareStageRef = useRef<HTMLDivElement>(null);
   const bubbleRef = useRef<HTMLDivElement>(null);
+  const scrollPositionsRef = useRef(new WeakMap<HTMLDivElement, PageScrollPosition>());
+  const pendingZoomRef = useRef<{ original?: PageScrollPosition; translated?: PageScrollPosition } | null>(null);
+  function resizePages(nextScale: number) {
+    const original = stageRef.current ? readPageScroll(stageRef.current) : undefined;
+    pendingZoomRef.current = {
+      original,
+      translated: readerTab === "compare" && linkedScroll ? original : compareStageRef.current ? readPageScroll(compareStageRef.current) : undefined,
+    };
+    setScale(nextScale);
+  }
+  useLayoutEffect(() => {
+    const positions = pendingZoomRef.current;
+    if (!positions) return;
+    pendingZoomRef.current = null;
+    if (stageRef.current && positions.original) {
+      scrollPositionsRef.current.set(stageRef.current, positions.original);
+      stageRef.current.scrollTop = pageScrollTop(stageRef.current, positions.original);
+    }
+    if (compareStageRef.current && positions.translated) {
+      scrollPositionsRef.current.set(compareStageRef.current, positions.translated);
+      compareStageRef.current.scrollTop = pageScrollTop(compareStageRef.current, positions.translated);
+    }
+  }, [scale]);
   const legacyEntryBelongsHere = paper?.projectIds.length === 1 && paper.projectIds[0] === projectId;
   const history = useMemo(() => readerAnswers.filter((item) => item.paperId === paperId && (item.projectId === projectId || (!item.projectId && legacyEntryBelongsHere))), [legacyEntryBelongsHere, paperId, projectId, readerAnswers]);
   const excerpts = useMemo(() => readerExcerpts.filter((item) => item.paperId === paperId && (item.projectId === projectId || (!item.projectId && legacyEntryBelongsHere))), [legacyEntryBelongsHere, paperId, projectId, readerExcerpts]);
-  // 当前页上带几何坐标的摘录 → PDF 原文上的彩色高亮块。
-  const highlights = useMemo<PdfHighlight[]>(() => excerpts
-    .filter((item) => item.page === pageNumber && (item.rects?.length ?? 0) > 0)
-    .map((item) => ({ id: item.id, rects: item.rects ?? [], note: item.note, kind: item.kind })), [excerpts, pageNumber]);
-
   // workspace 方法(updatePaper 等)每次工作区数据变化都会换新 identity,
   // 绝不能进 useCallback/useEffect 依赖:否则 updatePaper → setData → 新方法 →
   // loadBlob 重建 → effect 重跑 → 再 updatePaper → 无限重载 PDF 死循环。
@@ -311,66 +277,110 @@ export function ReaderPage() {
 
   useEffect(() => () => {
     documentRunRef.current?.abort();
+    pageRunRef.current?.abort();
+    ocrRunRef.current?.abort();
     const parsingPage = documentParsingPageRef.current;
     if (parsingPage !== null) void cancelReaderPageParse(paperId, parsingPage).catch(() => {});
   }, [paperId]);
 
+  useEffect(() => () => { ocrRunRef.current?.abort(); }, [paperId, pageNumber]);
+
   useEffect(() => {
-    if (readerTab !== "compare" || !pdfPage) return;
+    if (!document) return;
+    let cancelled = false;
+    void document.getPage(1).then((page) => {
+      if (!cancelled) { const { width, height } = page.getViewport({ scale: 1 }); setPageSize({ width, height }); }
+    }).catch(() => {});
+    return () => { cancelled = true; };
+  }, [document]);
+
+  useEffect(() => {
+    if (readerTab !== "compare" || !document) return;
     const original = stageRef.current;
     const translated = compareStageRef.current;
     if (!original || !translated) return;
     const fit = () => {
-      const width = pdfPage.getViewport({ scale: 1 }).width;
+      const width = pageSize.width;
       const available = Math.min(original.clientWidth, translated.clientWidth) - 36;
-      if (available > 0) setScale(Math.max(.7, Math.min(2.2, available / width)));
+      if (available > 0) resizePages(Math.max(.7, Math.min(2.2, available / width)));
     };
     fit();
     const observer = new ResizeObserver(fit);
     observer.observe(original);
     observer.observe(translated);
     return () => observer.disconnect();
-  }, [pdfPage, readerTab]);
+  }, [document, pageSize.width, readerTab]);
+
+  function jumpToPage(requested: number) {
+    const page = Math.min(document?.numPages ?? 1, Math.max(1, requested));
+    setPageNumber(page);
+    for (const stage of [stageRef.current, compareStageRef.current]) {
+      if (stage) { scrollPositionsRef.current.set(stage, { page, progress: 0 }); stage.scrollTop = pageScrollTop(stage, { page, progress: 0 }); }
+    }
+    dismissBubble();
+  }
+
+  useLayoutEffect(() => {
+    if (!document || !pdfPage || restoredDocumentRef.current === document) return;
+    restoredDocumentRef.current = document;
+    for (const stage of [stageRef.current, compareStageRef.current]) {
+      if (stage) { const position = { page: pageNumberRef.current, progress: 0 }; scrollPositionsRef.current.set(stage, position); stage.scrollTop = pageScrollTop(stage, position); }
+    }
+  }, [document, pdfPage]);
 
   useEffect(() => {
-    if (readerTab !== "compare") return;
+    if (!document) return;
     const original = stageRef.current;
     const translated = compareStageRef.current;
-    if (!original || !translated) return;
-    let syncing = false;
-    const sync = (source: HTMLDivElement, target: HTMLDivElement) => {
-      if (syncing) return;
-      const sourceRange = source.scrollHeight - source.clientHeight;
-      const targetRange = target.scrollHeight - target.clientHeight;
-      syncing = true;
-      target.scrollTop = sourceRange > 0 ? source.scrollTop / sourceRange * Math.max(0, targetRange) : 0;
-      requestAnimationFrame(() => { syncing = false; });
+    if (!original) return;
+    const expected = new WeakMap<HTMLElement, number>();
+    const scroll = (source: HTMLDivElement, target: HTMLDivElement | null) => {
+      if (restoredDocumentRef.current !== document) return;
+      const pending = expected.get(source);
+      if (pending !== undefined) {
+        expected.delete(source);
+        if (Math.abs(source.scrollTop - pending) < 2) return;
+      }
+      const position = readPageScroll(source);
+      scrollPositionsRef.current.set(source, position);
+      // Independent translation scrolling must not change the original's current-page actions.
+      if (restoredDocumentRef.current === document && source.clientHeight > 0 && (source === original || linkedScroll)) setPageNumber(readPageScroll(source, source.clientHeight * .2).page);
+      if (readerTab !== "compare" || !linkedScroll || !target) return;
+      scrollPositionsRef.current.set(target, position);
+      const top = Math.min(pageScrollTop(target, position), Math.max(0, target.scrollHeight - target.clientHeight));
+      expected.set(target, top);
+      target.scrollTop = top;
     };
-    const fromOriginal = () => sync(original, translated);
-    const fromTranslated = () => sync(translated, original);
+    const fromOriginal = () => scroll(original, translated);
+    const fromTranslated = () => { if (translated) scroll(translated, original); };
     original.addEventListener("scroll", fromOriginal, { passive: true });
-    translated.addEventListener("scroll", fromTranslated, { passive: true });
+    translated?.addEventListener("scroll", fromTranslated, { passive: true });
+    if (readerTab === "compare" && linkedScroll && translated) scroll(original, translated);
+    // Loading a cached translation may change the height of pages above the viewport.
+    // Keep the last page-relative anchor, rather than allowing the browser to drift into a previous page.
+    const observer = new ResizeObserver(() => {
+      if (restoredDocumentRef.current !== document) return;
+      for (const stage of [original, translated]) {
+        if (!stage) continue;
+        const anchor = scrollPositionsRef.current.get(stage);
+        if (!anchor) continue;
+        const top = Math.min(pageScrollTop(stage, anchor), Math.max(0, stage.scrollHeight - stage.clientHeight));
+        if (Math.abs(stage.scrollTop - top) > 1) { expected.set(stage, top); stage.scrollTop = top; }
+      }
+    });
+    for (const stage of [original, translated]) stage?.querySelectorAll("[data-reader-page]").forEach((page) => observer.observe(page));
     return () => {
+      observer.disconnect();
       original.removeEventListener("scroll", fromOriginal);
-      translated.removeEventListener("scroll", fromTranslated);
+      translated?.removeEventListener("scroll", fromTranslated);
     };
-  }, [readerTab]);
-
-  useEffect(() => {
-    if (readerTab !== "compare") return;
-    if (stageRef.current) stageRef.current.scrollTop = 0;
-    if (compareStageRef.current) compareStageRef.current.scrollTop = 0;
-  }, [pageNumber, readerTab]);
+  }, [document, readerTab, linkedScroll]);
 
   // 双语对照:进入对照 / 翻页 / OCR 后重跑时,取当前页文本 → 切块 → 填缓存。
   // 依赖里刻意不放 workspace 方法(ERR-20260814-002),只放页面身份。
   useEffect(() => {
-    // 离开对照 / 翻页 / OCR 后重跑之前,先把上一批已译完的段落落盘。
-    // 用的是 compareContextRef 里那一页的 key,所以翻页时不会写错地方;
-    // 没有已译段落时 flush 自己会跳过。花钱买来的译文不该因为切个标签就丢缓存。
-    if (compareBlocksRef.current.some((block) => block.status === "done")) {
-      void flushCompareTranslations().catch(() => { /* 缓存写失败不影响阅读 */ });
-    }
+    // 全文任务与单段重试完成时已立即保存。刷新只读取缓存；旧视图不能回写，
+    // 否则原图或部分译文会覆盖全文任务刚保存的完整页。
     // 任何一次新的上下文都作废在途翻译,否则上一页的译文会被回填进这一页。
     compareRunId.current += 1;
     compareBlocksRef.current = [];
@@ -379,61 +389,25 @@ export function ReaderPage() {
     setCompareParser("layout");
     setComparePhase("idle");
     setCompareError("");
-    if (readerTab !== "compare" || !pdfPage) return;
+    if (readerTab !== "compare" || !pdfPage || pdfPage.pageNumber !== pageNumber) return;
     let cancelled = false;
     setCompareLoading(true);
     void (async () => {
-      const current = await currentPageText(pdfPage, paperId);
+      const data = await readTranslationPage(pdfPage, paperId);
       if (cancelled) return;
-      setCompareSource(current.source);
-      const cachedParsed = await parseReaderPage(paperId, pageNumber, true).catch(() => null);
-      if (cancelled) return;
-      if (cachedParsed) {
-        const parsedBlocks = structuredCompareBlocks(cachedParsed);
-        const parsedLanguage = targetLanguageFor(cachedParsed.blocks.filter((block) => block.kind === "paragraph" || block.kind === "heading").map((block) => block.text).join(" "));
-        const saved = await getPageTranslations(paperId, pageNumber, compareCacheLanguage(parsedLanguage, "mineru"));
-        if (cancelled) return;
-        const restored = parsedBlocks.map((block, index) => {
-          if (block.static) return block;
-          const hit = saved?.blocks.find((entry) => entry.index === index && entry.source === block.source);
-          return hit && validCachedTranslation(hit.translation) ? { ...block, status: "done" as const, translation: hit.translation, model: hit.model, recognizedText: hit.recognizedText } : block;
-        });
-        compareBlocksRef.current = restored;
-        compareContextRef.current = { page: pageNumber, language: parsedLanguage, parser: "mineru" };
-        setCompareBlocks(restored);
-        setCompareColumns(cachedParsed.columns);
-        setCompareLanguage(parsedLanguage);
-        setCompareParser("mineru");
-        setCompareLoading(false);
-        return;
-      }
-      if (!current.text) { setCompareLoading(false); return; }
-      setCompareColumns(current.layout?.columns ?? 1);
-      const paragraphs = current.layout?.blocks ?? [{ text: current.text, kind: "paragraph" as const, column: 0 as const, leadIn: false }];
-      const blocks: CompareBlock[] = paragraphs.flatMap((paragraph) => splitPageIntoBlocks(paragraph.text, 1_400)
-        .map((source, index) => ({ source, kind: paragraph.kind, column: paragraph.column, continuation: index > 0, leadIn: paragraph.leadIn && index === 0, status: "idle" as const, translation: "" })));
-      compareBlocksRef.current = blocks;
-      setCompareBlocks(blocks);
+      compareBlocksRef.current = data.blocks;
+      compareContextRef.current = { page: pageNumber, language: data.language, parser: data.parser };
+      setCompareBlocks(data.blocks);
+      setCompareColumns(data.columns);
+      setCompareLanguage(data.language);
+      setCompareParser(data.parser);
+      setCompareSource(data.source);
       setCompareLoading(false);
-      // 中文论文 → 译成英文;英文论文 → 译成中文。与划词气泡同一套判断。
-      const language = targetLanguageFor(current.text);
-      setCompareLanguage(language);
-      compareContextRef.current = { page: pageNumber, language, parser: "layout" };
-      // 缓存命中就直接填上:翻回来看过的页不该再花一次钱、再等一遍。
-      // 必须逐段比对原文 —— 换过 PDF 后页码不变、文本已变,只按页码命中就是静默错译。
-      // 允许复用未变化的段落,即使其他段落或页脚变化,避免重复付费。
-      const stored = await getPageTranslations(paperId, pageNumber, compareCacheLanguage(language, "layout"));
-      if (cancelled || !stored) return;
-      const restored = blocks.map((block, index) => {
-        const hit = stored.blocks.find((entry) => entry.index === index && entry.source === block.source);
-        return hit && validCachedTranslation(hit.translation) ? { ...block, status: "done" as const, translation: hit.translation, model: hit.model } : block;
-      });
-      compareBlocksRef.current = restored;
-      setCompareBlocks(restored);
-    })().catch(() => {
+    })().catch((failure) => {
       if (cancelled) return;
       setCompareLoading(false);
       setCompareSource("empty");
+      setCompareError(failure instanceof Error ? failure.message : "本页文字读取失败，请重试。");
     });
     return () => { cancelled = true; };
   }, [readerTab, pdfPage, pageNumber, ocrNonce, documentRefreshNonce, paperId]);
@@ -492,13 +466,13 @@ export function ReaderPage() {
       }
       const result = await askReader({
         paper: { id: paper.id, title: paper.title, authors: paper.authors, year: paper.year },
-        page: pageNumber,
+        page: selection.trim().length >= 10 ? selectedPage : pageNumber,
         selection: selection.trim().length >= 10 ? selection : "",
         ...(fullText ? { fullText } : {}),
         question: question.trim(),
       });
       setAnswer(result.answer); setModel(result.model);
-      addReaderAnswer({ projectId, paperId: paper.id, page: pageNumber, selection, question: question.trim(), answer: result.answer, model: result.model, createdAt: result.generatedAt });
+      addReaderAnswer({ projectId, paperId: paper.id, page: selection.trim().length >= 10 ? selectedPage : pageNumber, selection, question: question.trim(), answer: result.answer, model: result.model, createdAt: result.generatedAt });
       setQuestion("");
     } catch (askError) {
       setError(askError instanceof Error ? askError.message : "AI 回答失败");
@@ -529,10 +503,11 @@ export function ReaderPage() {
   }
 
   // PDF 选区变化 → 同步侧栏文本框 + 气泡锚点。空选区(在原文区单击)即收起气泡。
-  function handleSelect(payload: SelectionPayload) {
+  function handleSelect(payload: SelectionPayload, sourcePage = pageNumber) {
+    if (payload.text) setPageNumber(sourcePage);
     setSelection(payload.text);
     setSelectionRects(payload.rects);
-    setSelectionPage(payload.text ? pageNumber : 0);
+    setSelectionPage(payload.text ? sourcePage : 0);
     // 换了选区就收掉上一段的译文:气泡和侧栏卡片共用同一个 translation,
     // 不清就会让新选区顶着一句"别人的翻译",违反 AI 推断须与来源可区分的规则。
     // 同句重译不花钱——translationCache 命中即返回。
@@ -554,14 +529,14 @@ export function ReaderPage() {
 
   // 只有"当前页选中"的矩形才能贴到这一页的摘录上;翻页后的旧矩形直接丢弃。
   function currentSelectionRects(): PageRect[] | undefined {
-    return selectionPage === pageNumber && selectionRects.length ? selectionRects : undefined;
+    return selectionPage > 0 && selectionRects.length ? selectionRects : undefined;
   }
 
   // 点 PDF 原文上的高亮块 → 跳到对应页、回填选区、打开该摘录的侧栏编辑框。
   function openAnchoredExcerpt(id: string) {
     const item = excerpts.find((entry) => entry.id === id);
     if (!item) return;
-    if (item.page !== pageNumber) setPageNumber(item.page);
+    if (item.page !== pageNumber) jumpToPage(item.page);
     setSelection(item.text);
     setSelectionRects(item.rects ?? []);
     setSelectionPage(item.page);
@@ -571,8 +546,8 @@ export function ReaderPage() {
 
   function saveExcerpt(kind: "note" | "evidence") {
     if (selection.length < 2) return;
-    addReaderExcerpt({ projectId, paperId, page: pageNumber, text: selection, note: excerptNote.trim(), kind, rects: currentSelectionRects() });
-    addKnowledge({ projectId, paperId, page: pageNumber, kind, title: excerptNote.trim() || `${kind === "evidence" ? "证据" : "笔记"} · 第 ${pageNumber} 页`, content: selection, note: excerptNote.trim(), source: "human", status: "draft" });
+    addReaderExcerpt({ projectId, paperId, page: selectedPage, text: selection, note: excerptNote.trim(), kind, rects: currentSelectionRects() });
+    addKnowledge({ projectId, paperId, page: selectedPage, kind, title: excerptNote.trim() || `${kind === "evidence" ? "证据" : "笔记"} · 第 ${selectedPage} 页`, content: selection, note: excerptNote.trim(), source: "human", status: "draft" });
     setExcerptNote("");
     setSavedMessage(kind === "evidence" ? "已保存为证据摘录" : "已保存为阅读笔记");
     clearSelection();
@@ -581,7 +556,7 @@ export function ReaderPage() {
 
   function saveHighlight() {
     if (selection.length < 2) return;
-    addReaderExcerpt({ projectId, paperId, page: pageNumber, text: selection, note: excerptNote.trim(), kind: "highlight", color: "yellow", rects: currentSelectionRects() });
+    addReaderExcerpt({ projectId, paperId, page: selectedPage, text: selection, note: excerptNote.trim(), kind: "highlight", color: "yellow", rects: currentSelectionRects() });
     setExcerptNote(""); setSavedMessage("已保存高亮"); clearSelection();
     window.setTimeout(() => setSavedMessage(""), 1800);
   }
@@ -595,29 +570,41 @@ export function ReaderPage() {
       return;
     }
     // 同一句译过一次就不再打 AI:划词连点/反复选中同一句时零成本。
-    const cached = translationCache.current.get(selection);
-    if (cached !== undefined) { setTranslation(cached); return; }
+    const targetLanguage = targetLanguageFor(selection);
+    const cacheKey = `${targetLanguage}:${selection}`;
+    const cached = translationCache.current.get(cacheKey);
+    if (cached !== undefined) { setTranslation(cached.translation); return; }
     setTranslating(true); setTranslation(""); setError("");
     try {
-      const targetLanguage = targetLanguageFor(selection);
-      const result = await translateSelection({ text: selection, targetLanguage, paperTitle: paper.title, page: pageNumber });
-      translationCache.current.set(selection, result.translation);
+      const result = await translateSelection({ text: selection, targetLanguage, paperTitle: paper.title, page: selectedPage });
+      translationCache.current.set(cacheKey, result);
       setTranslation(result.translation);
     } catch (translateError) { setError(translateError instanceof Error ? translateError.message : "翻译失败"); }
     finally { setTranslating(false); }
   }
 
   async function runOcr() {
-    if (!pdfPage || ocrProgress !== null) return;
+    if (!pdfPage || pdfPage.pageNumber !== pageNumber || ocrRunRef.current) return;
+    const controller = new AbortController();
+    ocrRunRef.current = controller;
+    const sourcePage = pageNumber;
+    setOcrStage("rendering");
     setOcrProgress(0); setError("");
     try {
-      const text = await recognizePdfPage(pdfPage, paperId, setOcrProgress);
-      setSelection(text); setSavedMessage(`第 ${pageNumber} 页 OCR 完成，可搜索与提取`);
+      const text = await recognizePdfPage(pdfPage, paperId, (progress) => { if (!controller.signal.aborted) setOcrProgress(progress); }, {
+        signal: controller.signal, onStage: (stage) => { if (!controller.signal.aborted) setOcrStage(stage); },
+      });
+      if (controller.signal.aborted || pageNumberRef.current !== sourcePage) return;
+      setSelection(text); setSelectionPage(sourcePage); setSelectionRects([]); setSavedMessage(`第 ${sourcePage} 页 OCR 完成，可点击“翻译本页”`);
       // 对照面板可能正显示"这一页没有文字":OCR 出了文本就让它重新切块。
       setOcrNonce((value) => value + 1);
-    } catch (ocrError) { setError(ocrError instanceof Error ? ocrError.message : "OCR 失败"); }
-    finally { setOcrProgress(null); }
+    } catch (ocrError) {
+      if (controller.signal.aborted) setSavedMessage("OCR 已取消，可重新识别本页");
+      else setError(ocrError instanceof Error ? ocrError.message : "OCR 失败");
+    } finally { ocrRunRef.current = null; setOcrProgress(null); }
   }
+
+  const ocrLabel = ocrProgress === null ? "OCR 本页" : ocrStage === "rendering" ? "OCR 准备页面…" : ocrStage === "loading" ? "OCR 加载引擎…" : `OCR ${Math.round(ocrProgress * 100)}%`;
 
   // ── 双语对照 ────────────────────────────────────────────────────────────
   // 进度从"已完成段数"现算,不累加:三个 worker 并发回填时累加会重复计数。
@@ -631,34 +618,24 @@ export function ReaderPage() {
     setCompareBlocks(next);
   }
 
-  async function translateCompareBlock(block: CompareBlock, language: "中文" | "English", sourcePage = pageNumber, model?: string, signal?: AbortSignal): Promise<{ translation: string; model: string; recognizedText?: string }> {
-    if (block.kind === "image") {
-      if (!block.image) return { translation: "原图不可预览，请查看左侧 PDF。", model: "MinerU" };
-      const recognizedText = await recognizeFigureText(block.image);
-      if (!recognizedText) return { translation: "图内未识别出可翻译文字，请查看原图。", model: "本机 OCR", recognizedText: "" };
-      const translated = await translateSelection({ text: recognizedText.slice(0, TRANSLATE_MAX_CHARS), targetLanguage: language, paperTitle: paper?.title ?? "", page: sourcePage, model, sourceType: "figure-ocr" }, signal);
-      return { ...translated, model: `本机 OCR + ${translated.model}`, recognizedText };
-    }
+  async function translateCompareBlock(block: CompareBlock, language: "中文" | "English", sourcePage = pageNumber, model?: string, signal?: AbortSignal): Promise<{ translation: string; model: string; generatedAt: string }> {
     // 划词气泡译过的段落直接命中:同一段文字不重复花钱。
     const cacheKey = `${language}:${block.source}`;
     const cached = translationCache.current.get(cacheKey);
-    const lock = block.kind === "table-cell" || block.kind === "table-caption" ? lockTableNumbers(block.source) : null;
-    if (cached !== undefined && validCachedTranslation(cached) && (!lock || preservesTableNumbers(block.source, cached))) return { translation: cached, model: "内存缓存" };
-    const result = await translateSelection({ text: lock?.masked ?? block.source, targetLanguage: language, paperTitle: paper?.title ?? "", page: sourcePage, model, sourceType: lock ? "table" : undefined }, signal);
-    const translation = lock?.restore(result.translation) ?? (lock ? null : result.translation);
-    if (translation === null) throw new Error("译文未保留表格数值，请重试该单元格");
-    translationCache.current.set(cacheKey, translation);
-    return { ...result, translation };
+    if (cached !== undefined && validCachedTranslation(cached.translation)) return cached;
+    const result = await translateSelection({ text: block.source, targetLanguage: language, paperTitle: paper?.title ?? "", page: sourcePage, model }, signal);
+    translationCache.current.set(cacheKey, result);
+    return result;
   }
 
   /** 译一段。返回 false 表示失败(已把该段标成 error)。 */
   async function runCompareBlock(index: number, runId: number, language: "中文" | "English"): Promise<boolean> {
     const block = compareBlocksRef.current[index];
-    if (!block) return true;
+    if (!block || block.static) return true;
     patchCompareBlock(index, { status: "pending", error: "" }, runId);
     try {
       const result = await translateCompareBlock(block, language);
-      patchCompareBlock(index, { status: "done", translation: result.translation, model: result.model, recognizedText: result.recognizedText }, runId);
+      patchCompareBlock(index, { status: "done", ...result }, runId);
       return true;
     } catch (translateError) {
       patchCompareBlock(index, { status: "error", error: translateError instanceof Error ? translateError.message : "翻译失败" }, runId);
@@ -672,16 +649,48 @@ export function ReaderPage() {
     if (!context) return;
     const done = compareBlocksRef.current
       .map((block, index) => ({ block, index }))
-      .filter((entry) => entry.block.status === "done");
+      .filter((entry) => !entry.block.static && entry.block.status === "done");
     if (!done.length) return;
     await savePageTranslations(paperId, context.page, compareCacheLanguage(context.language, context.parser), {
       source: compareBlocksRef.current.map((block) => block.source).join(" "),
-      blocks: done.map((entry) => ({ index: entry.index, source: entry.block.source, translation: entry.block.translation, model: entry.block.model ?? "", recognizedText: entry.block.recognizedText })),
+      blocks: done.map((entry) => ({ index: entry.index, source: entry.block.source, translation: entry.block.translation, model: entry.block.model ?? "", generatedAt: entry.block.generatedAt })),
     });
   }
 
+  async function translateCurrentPage() {
+    const context = compareContextRef.current;
+    if (!context || context.page !== pageNumber || pageRunRef.current || documentRunRef.current || compareLoading || comparePhase === "working") return;
+    const controller = new AbortController();
+    pageRunRef.current = controller;
+    const runId = ++compareRunId.current;
+    const original = compareBlocksRef.current;
+    setPageTranslationActive(true); setComparePhase("working"); setCompareError("");
+    try {
+      const { model } = await getAiModels();
+      const result = await translatePageBlocks(original, {
+        signal: controller.signal,
+        translate: (block) => translateCompareBlock(block, context.language, context.page, model || undefined, controller.signal),
+        onBlock: (index, block) => patchCompareBlock(index, block, runId),
+      });
+      const done = result.blocks.map((block, index) => ({ block, index })).filter(({ block }) => !block.static && block.status === "done");
+      if (done.length) await savePageTranslations(paperId, context.page, compareCacheLanguage(context.language, context.parser), {
+        source: result.blocks.map((block) => block.source).join(" "),
+        blocks: done.map(({ block, index }) => ({ index, source: block.source, translation: block.translation, model: block.model ?? "", generatedAt: block.generatedAt })),
+      });
+      if (compareRunId.current === runId) {
+        setCompareError(controller.signal.aborted ? "本页翻译已取消，完成的译文已保存。" : result.error);
+      }
+    } catch (failure) {
+      if (compareRunId.current === runId) setCompareError(failure instanceof Error ? failure.message : "本页翻译失败，请重试。");
+    } finally {
+      pageRunRef.current = null; setPageTranslationActive(false);
+      if (compareRunId.current === runId) setComparePhase("idle");
+      else setDocumentRefreshNonce((value) => value + 1);
+    }
+  }
+
   async function translateWholeDocument() {
-    if (!document || !paper || documentRunRef.current || comparePhase === "working") return;
+    if (!document || !paper || documentRunRef.current || pageRunRef.current || comparePhase === "working") return;
     const controller = new AbortController();
     documentRunRef.current = controller;
     const requestedPaperId = paperId;
@@ -695,25 +704,37 @@ export function ReaderPage() {
       const config = await getAiConfig().catch(() => null);
       selectedModel = config?.configured ? config.model : (await getAiModels()).model || undefined;
       if (controller.signal.aborted) throw new Error("全文翻译已取消");
+      if (!selectedModel) throw new Error("未读取到可用模型，请在设置页保存 AI 配置并进行连接自检。");
       setDocumentJob((current) => current ? { ...current, model: selectedModel || "默认模型" } : current);
       for (const page of pages) {
         if (controller.signal.aborted) throw new Error("全文翻译已取消");
         setDocumentJob((current) => current ? { ...current, stage: "parsing", page, completedPages, completedBlocks: 0, totalBlocks: 0 } : current);
         documentParsingPageRef.current = page;
-        let parsed: ParsedPage;
+        let blocks: CompareBlock[];
+        let language: "中文" | "English";
+        let parser: "mineru" | "layout" = "mineru";
         try {
-          parsed = await parseDocumentPageWithRetry(requestedPaperId, page, controller.signal);
+          const parsed = await parseDocumentPageWithRetry(requestedPaperId, page, controller.signal);
+          blocks = structuredCompareBlocks(parsed);
+          if (!blocks.some((block) => !block.static && block.source.trim().length >= 2)) throw new Error("精确解析未返回可翻译文字");
+          language = targetLanguageFor(parsed.blocks.filter((block) => block.kind === "paragraph" || block.kind === "heading").map((block) => block.text).join(" "));
+        } catch (parseError) {
+          if (controller.signal.aborted) throw parseError;
+          const current = await currentPageText(await document.getPage(page), requestedPaperId);
+          if (!current.text) throw new Error(`第 ${page} 页精确解析失败：${parseError instanceof Error ? parseError.message : "无法识别版面"}。本页也没有可读文字，请先 OCR 本页，再翻译本页或继续全文翻译。`);
+          blocks = textCompareBlocks(current).blocks;
+          language = targetLanguageFor(current.text);
+          parser = "layout";
+          setDocumentJob((job) => job ? { ...job, notice: `第 ${page} 页精确解析失败，改用${current.source === "ocr" ? "已识别的 OCR" : "PDF 文字"}继续翻译；版面为近似还原。` } : job);
         } finally {
           documentParsingPageRef.current = null;
         }
         if (controller.signal.aborted) throw new Error("全文翻译已取消");
-        const language = targetLanguageFor(parsed.blocks.filter((block) => block.kind === "paragraph" || block.kind === "heading").map((block) => block.text).join(" "));
-        const blocks = structuredCompareBlocks(parsed);
-        const stored = await getPageTranslations(requestedPaperId, page, compareCacheLanguage(language, "mineru"));
+        const stored = await getPageTranslations(requestedPaperId, page, compareCacheLanguage(language, parser));
         const restored = blocks.map((block, index) => {
           if (block.static) return block;
           const hit = stored?.blocks.find((entry) => entry.index === index && entry.source === block.source);
-          return hit && validCachedTranslation(hit.translation) ? { ...block, status: "done" as const, translation: hit.translation, model: hit.model, recognizedText: hit.recognizedText } : block;
+          return hit && validCachedTranslation(hit.translation) ? { ...block, status: "done" as const, translation: hit.translation, model: hit.model, generatedAt: hit.generatedAt } : block;
         });
         const pending = restored.map((block, index) => ({ block, index })).filter(({ block }) => !block.static && block.status !== "done").map(({ index }) => index);
         const totalBlocks = restored.filter((block) => !block.static).length;
@@ -729,7 +750,7 @@ export function ReaderPage() {
             try {
               const result = await translateCompareBlock(restored[index], language, page, selectedModel, controller.signal);
               if (controller.signal.aborted) return;
-              restored[index] = { ...restored[index], status: "done", translation: result.translation, model: result.model, recognizedText: result.recognizedText };
+              restored[index] = { ...restored[index], status: "done", ...result };
               completedBlocks += 1;
               consecutiveFailures = 0;
               setDocumentJob((current) => current ? { ...current, completedBlocks, model: selectedModel || result.model } : current);
@@ -744,13 +765,13 @@ export function ReaderPage() {
         };
         await Promise.all(Array.from({ length: Math.min(COMPARE_CONCURRENCY, pending.length) }, () => worker()));
         if (restored.some((block) => block.status === "done" && !block.static)) {
-          await savePageTranslations(requestedPaperId, page, compareCacheLanguage(language, "mineru"), {
+          await savePageTranslations(requestedPaperId, page, compareCacheLanguage(language, parser), {
             source: restored.map((block) => block.source).join(" "),
             blocks: restored.map((block, index) => ({ block, index })).filter(({ block }) => block.status === "done")
-              .map(({ block, index }) => ({ index, source: block.source, translation: block.translation, model: block.model ?? "", recognizedText: block.recognizedText })),
+              .map(({ block, index }) => ({ index, source: block.source, translation: block.translation, model: block.model ?? "", generatedAt: block.generatedAt })),
           });
         }
-        if (pageNumberRef.current === page) setDocumentRefreshNonce((value) => value + 1);
+        setDocumentRefreshNonce((value) => value + 1);
         if (controller.signal.aborted) throw new Error("全文翻译已取消");
         if (restored.some((block) => !block.static && block.status !== "done")) throw new Error(`第 ${page} 页翻译未完成：${firstError || "请重试"}`);
         completedPages += 1;
@@ -779,7 +800,7 @@ export function ReaderPage() {
   }
 
   async function retryCompareBlock(index: number) {
-    if (comparePhase === "working") return;
+    if (comparePhase === "working" || pageRunRef.current || documentRunRef.current) return;
     compareContextRef.current = { page: pageNumber, language: compareLanguage, parser: compareParser };
     const runId = ++compareRunId.current;
     setComparePhase("working"); setCompareError("");
@@ -792,65 +813,15 @@ export function ReaderPage() {
   }
 
   /** 点对照里的英文段 → 回填选区并切回批注标签,高亮/笔记/证据按钮立即可用。 */
-  function annotateCompareBlock(source: string) {
+  function annotateCompareBlock(source: string, sourcePage: number) {
+    jumpToPage(sourcePage);
     setSelection(source);
     setSelectionRects([]);
-    setSelectionPage(0);
+    setSelectionPage(sourcePage);
     setBubbleAnchor(null);
     setReaderTab("notes");
   }
 
-  const compareEntries = compareBlocks.map((block, index) => ({ block, index }));
-  const renderTranslation = (block: CompareBlock) => {
-    const visible = block.translation.replace(/<\/?(?:sup|sub|em|strong|i|b)>/gi, "");
-    const lead = block.leadIn ? /^(.+?[。.!?])([\s\S]*)$/.exec(visible) : null;
-    return lead ? <><strong>{lead[1]}</strong>{lead[2]}</> : visible;
-  };
-  const renderBlockContent = (block: CompareBlock, index: number) => <>
-    {block.status === "done" ? <button type="button" title="查看原文并记笔记" onClick={() => annotateCompareBlock(block.source)}>{renderTranslation(block)}</button> : null}
-    {block.status === "pending" ? <p>{block.kind === "image" ? "正在识别图中文字…" : `第 ${index + 1} 项翻译中…`}</p> : null}
-    {block.status === "idle" ? <p>{block.kind === "image" ? "图中文字待识别并翻译" : `第 ${index + 1} 项待翻译`}</p> : null}
-    {block.status === "error" ? <p>{block.error || "翻译失败"} <button type="button" onClick={() => void retryCompareBlock(index)}>重试</button></p> : null}
-  </>;
-  const renderCompareEntry = ({ block, index }: typeof compareEntries[number]) => <div
-    className={block.kind === "image" || block.kind === "formula" ? "translation-visual" : "translation-paragraph"}
-    data-status={block.status}
-    data-kind={block.kind}
-    data-continuation={block.continuation}
-    key={index}
-  >
-    {block.kind === "image" || block.kind === "formula" ? <>
-      {block.image ? <img src={block.image} alt={block.kind === "formula" ? "原文公式" : "原文图片"} /> : null}
-      {block.kind === "formula" ? <small>公式保留原貌{block.image ? "" : ` · ${block.source}`}</small> : <>
-        {block.recognizedText ? <small>图内原文（本机 OCR）：{block.recognizedText}</small> : null}
-        {renderBlockContent(block, index)}
-      </>}
-    </> : renderBlockContent(block, index)}
-  </div>;
-  const renderCompareList = (entries: typeof compareEntries) => {
-    const shownTables = new Set<number>();
-    return entries.map((entry) => {
-      const id = entry.block.tableId;
-      if (id === undefined) return renderCompareEntry(entry);
-      if (shownTables.has(id)) return null;
-      shownTables.add(id);
-      const tableEntries = entries.filter(({ block }) => block.tableId === id);
-      const caption = tableEntries.find(({ block }) => block.kind === "table-caption");
-      const cells = tableEntries.filter(({ block }) => block.kind === "table-cell");
-      const rowNumbers = [...new Set(cells.map(({ block }) => block.row ?? 0))].sort((a, b) => a - b);
-      return <figure className="translation-table" key={`table-${id}`}>
-        {caption ? <figcaption>{renderBlockContent(caption.block, caption.index)}</figcaption> : null}
-        {cells.length ? <div className="translation-table-scroll"><table><tbody>{rowNumbers.map((row) => <tr key={row}>
-          {cells.filter(({ block }) => block.row === row).map(({ block, index }) => {
-            const Cell = row === 0 ? "th" : "td";
-            return <Cell key={index} rowSpan={block.rowSpan} colSpan={block.colSpan}>
-              {renderBlockContent(block, index)}
-            </Cell>;
-          })}
-        </tr>)}</tbody></table></div> : <p>表格结构无法识别，请查看左侧原文。</p>}
-      </figure>;
-    });
-  };
 
   if (!paper) return <div className="reader-missing"><EmptyState icon={<BookOpenText />} title="当前项目中没有这篇文献" description="阅读器只允许打开当前项目关联的论文。" action={<button className="primary" onClick={() => navigate(libraryPath)}>返回项目文献库</button>} /></div>;
 
@@ -858,53 +829,46 @@ export function ReaderPage() {
     <header className="reader-header"><div className="reader-title"><button className="icon-button" onClick={() => navigate(libraryPath)} aria-label="返回项目文献库"><ArrowLeft /></button><FilePdf weight="duotone" /><div><span className="eyebrow">{project?.name}</span><h1>{paper.title}</h1><small>{paper.authors} · {paper.venue} {paper.year}</small></div></div><label className="secondary-button upload-button"><UploadSimple />{document ? "更换 PDF" : "上传 PDF"}<input type="file" accept="application/pdf,.pdf" onChange={(event) => void upload(event)} /></label></header>
     <div className="reader-layout" data-reader-mode={readerTab}>
       <section className="reader-document">
-        <div className="reader-toolbar"><div className="outline-control"><button className="icon-button" disabled={!paper.outline?.length} onClick={() => setOutlineOpen((value) => !value)} aria-label="文档目录"><ListBullets /></button>{outlineOpen && paper.outline?.length ? <nav className="reader-outline" aria-label="PDF 目录">{paper.outline.map((item, index) => <button key={`${item.page}-${index}`} onClick={() => { setPageNumber(item.page); setOutlineOpen(false); }}><span>{item.title}</span><small>{item.page}</small></button>)}</nav> : null}<button className="icon-button" disabled={pageNumber <= 1} onClick={() => setPageNumber((value) => value - 1)}><ArrowLeft /></button><label><input type="number" min={1} max={document?.numPages ?? 1} value={pageNumber} onChange={(event) => setPageNumber(Math.min(document?.numPages ?? 1, Math.max(1, Number(event.target.value) || 1)))} /> / {document?.numPages ?? 0}</label><button className="icon-button" disabled={!document || pageNumber >= document.numPages} onClick={() => setPageNumber((value) => value + 1)}><ArrowRight /></button></div><form className="reader-search" onSubmit={(event) => void searchDocument(event)}><MagnifyingGlass /><input value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} placeholder="全文搜索" /><button disabled={!document || searchQuery.trim().length < 2 || searching}>{searching ? "搜索中" : "搜索"}</button>{searchResults.length ? <div className="search-results">{searchResults.map((result) => <button type="button" key={`${result.page}-${result.excerpt}`} onClick={() => { setPageNumber(result.page); setSearchResults([]); }}><strong>第 {result.page} 页</strong><span>{result.excerpt}</span></button>)}</div> : null}</form><button className="secondary-button ocr-button" disabled={!pdfPage || ocrProgress !== null} onClick={() => void runOcr()}><Scan />{ocrProgress !== null ? `OCR ${Math.round(ocrProgress * 100)}%` : "OCR 本页"}</button><div><button className="icon-button" onClick={() => setScale((value) => Math.max(.7, value - .15))}><Minus /></button><span>{Math.round(scale * 100)}%</span><button className="icon-button" onClick={() => setScale((value) => Math.min(2.2, value + .15))}><Plus /></button></div></div>
-        <div className="pdf-stage" ref={stageRef}>{loading ? <LoadingState title="正在加载 PDF" /> : null}{!loading && error && !document ? <EmptyState icon={<WarningCircle />} title="无法打开 PDF" description={error} action={<label className="primary upload-button"><UploadSimple />重新选择<input type="file" accept="application/pdf,.pdf" onChange={(event) => void upload(event)} /></label>} /> : null}{!loading && !document ? <EmptyState icon={<FilePdf />} title="上传 PDF 开始阅读" action={<label className="primary upload-button"><UploadSimple />选择 PDF<input type="file" accept="application/pdf,.pdf" onChange={(event) => void upload(event)} /></label>} /> : null}{document && pdfPage ? <PdfPage page={pdfPage} scale={scale} onSelect={handleSelect} highlights={highlights} onHighlightClick={openAnchoredExcerpt} /> : null}</div>
+        <div className="reader-toolbar"><div className="outline-control"><button className="icon-button" disabled={!paper.outline?.length} onClick={() => setOutlineOpen((value) => !value)} aria-label="文档目录"><ListBullets /></button>{outlineOpen && paper.outline?.length ? <nav className="reader-outline" aria-label="PDF 目录">{paper.outline.map((item, index) => <button key={`${item.page}-${index}`} onClick={() => { jumpToPage(item.page); setOutlineOpen(false); }}><span>{item.title}</span><small>{item.page}</small></button>)}</nav> : null}<label title="向下滚动连续阅读，也可输入页码跳转"><input aria-label="当前页码" type="number" min={1} max={document?.numPages ?? 1} value={pageNumber} onChange={(event) => jumpToPage(Number(event.target.value) || 1)} /> / {document?.numPages ?? 0}</label></div><form className="reader-search" onSubmit={(event) => void searchDocument(event)}><MagnifyingGlass /><input value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} placeholder="全文搜索" /><button disabled={!document || searchQuery.trim().length < 2 || searching}>{searching ? "搜索中" : "搜索"}</button>{searchResults.length ? <div className="search-results">{searchResults.map((result) => <button type="button" key={`${result.page}-${result.excerpt}`} onClick={() => { jumpToPage(result.page); setSearchResults([]); }}><strong>第 {result.page} 页</strong><span>{result.excerpt}</span></button>)}</div> : null}</form><button className="secondary-button ocr-button" disabled={!pdfPage || pdfPage.pageNumber !== pageNumber || ocrProgress !== null} onClick={() => void runOcr()}><Scan />{ocrLabel}</button>{ocrProgress !== null ? <button type="button" className="secondary-button" onClick={() => ocrRunRef.current?.abort()}>取消 OCR</button> : null}<div><button className="icon-button" onClick={() => resizePages(Math.max(.7, scale - .15))}><Minus /></button><span>{Math.round(scale * 100)}%</span><button className="icon-button" onClick={() => resizePages(Math.min(2.2, scale + .15))}><Plus /></button></div></div>
+        <div className="pdf-stage" ref={stageRef}>{loading && !document ? <LoadingState title="正在加载 PDF" /> : null}{!loading && error && !document ? <EmptyState icon={<WarningCircle />} title="无法打开 PDF" description={error} action={<label className="primary upload-button"><UploadSimple />重新选择<input type="file" accept="application/pdf,.pdf" onChange={(event) => void upload(event)} /></label>} /> : null}{!loading && !document ? <EmptyState icon={<FilePdf />} title="上传 PDF 开始阅读" action={<label className="primary upload-button"><UploadSimple />选择 PDF<input type="file" accept="application/pdf,.pdf" onChange={(event) => void upload(event)} /></label>} /> : null}{document ? Array.from({ length: document.numPages }, (_, index) => index + 1).map((page) => <ContinuousPage key={page} page={page} activePage={pageNumber} width={pageSize.width * scale} height={pageSize.height * scale} scale={scale} stage={stageRef}>
+          {(visible) => <ContinuousPdfPage document={document} pageNumber={page} activePage={pdfPage?.pageNumber === page ? pdfPage : undefined} visible={visible} scale={scale} onSelect={(payload) => handleSelect(payload, page)} highlights={excerpts.filter((item) => item.page === page && item.rects?.length).map((item) => ({ id: item.id, rects: item.rects!, note: item.note, kind: item.kind }))} onHighlightClick={openAnchoredExcerpt} />}
+        </ContinuousPage>) : null}</div>
       </section>
       <aside className="reader-ai">
         <div className="reader-tabs" role="tablist" aria-label="右栏视图">
-          <button type="button" role="tab" className="reader-tab" aria-selected={readerTab === "notes"} onClick={() => setReaderTab("notes")}><NotePencil />批注与问答</button>
-          <button type="button" role="tab" className="reader-tab" aria-selected={readerTab === "compare"} onClick={() => setReaderTab("compare")}><Translate />双语对照</button>
+          <button id="reader-notes-tab" type="button" role="tab" className="reader-tab" aria-controls="reader-notes-panel" aria-selected={readerTab === "notes"} onClick={() => setReaderTab("notes")}><NotePencil />批注与问答</button>
+          <button id="reader-compare-tab" type="button" role="tab" className="reader-tab" aria-controls="reader-compare-panel" aria-selected={readerTab === "compare"} onClick={() => setReaderTab("compare")}><Translate />双语对照</button>
         </div>
         {/* 用 CSS 隐藏而不是卸载:切走再切回时,写了一半的问题和摘录备注不该丢。 */}
-        <div className="reader-notes" data-active={readerTab === "notes"}>
+        <div id="reader-notes-panel" role="tabpanel" aria-labelledby="reader-notes-tab" className="reader-notes" data-active={readerTab === "notes"}>
         <div className="reader-ai-intro"><Sparkle weight="duotone" /><div><strong>问 AI</strong><span>选中文字则基于选区回答；不选中则基于全文回答</span></div></div>
-        <form onSubmit={(event) => void ask(event)}><label className="selection-box"><span><Quotes /> 当前选区 · 第 {pageNumber} 页</span><textarea value={selection} onChange={(event) => setSelection(event.target.value)} placeholder="在左侧 PDF 中拖动选择一段文字；留空则对全文提问…" maxLength={8000} /><small className={selection.length > TRANSLATE_MAX_CHARS ? "selection-count over" : "selection-count"}>{selection.length} / {TRANSLATE_MAX_CHARS}{selection.length > TRANSLATE_MAX_CHARS ? " · 超出翻译上限" : ""}</small></label><label className="excerpt-note"><span>摘录备注（可选）</span><input value={excerptNote} onChange={(event) => setExcerptNote(event.target.value)} placeholder="记录你的判断或用途" /></label><div className="excerpt-actions"><button type="button" disabled={selection.length < 2} onClick={saveHighlight}><BookmarkSimple />高亮</button><button type="button" disabled={selection.length < 2} onClick={() => saveExcerpt("note")}><NotePencil />笔记</button><button type="button" disabled={selection.length < 2} onClick={() => saveExcerpt("evidence")}><BookmarkSimple />证据</button><button type="button" disabled={selection.length < 2 || translating} onClick={() => void translate()}><Translate />{translating ? "翻译中" : "翻译"}</button><span>{savedMessage}</span></div>{translation ? <div className="translation-card"><strong>选区翻译</strong><p>{translation}</p></div> : null}<label className="question-box"><span>你想问什么？</span><textarea value={question} onChange={(event) => setQuestion(event.target.value)} placeholder="例如：作者为什么采用这个设计？未选中文字时将基于全文回答" maxLength={800} /></label><button className="primary ask-button" disabled={question.trim().length < 2 || asking}>{asking ? <><ArrowsClockwise className="spin" />正在回答</> : <><Sparkle />{selection.trim().length >= 10 ? "基于选区回答" : "基于全文回答"}</>}</button></form>
+        <form onSubmit={(event) => void ask(event)}><label className="selection-box"><span><Quotes /> 当前选区 · 第 {selectedPage} 页</span><textarea value={selection} onChange={(event) => { setSelection(event.target.value); setSelectionPage(pageNumber); setSelectionRects([]); }} placeholder="在左侧 PDF 中拖动选择一段文字；留空则对全文提问…" maxLength={8000} /><small className={selection.length > TRANSLATE_MAX_CHARS ? "selection-count over" : "selection-count"}>{selection.length} / {TRANSLATE_MAX_CHARS}{selection.length > TRANSLATE_MAX_CHARS ? " · 超出翻译上限" : ""}</small></label><label className="excerpt-note"><span>摘录备注（可选）</span><input value={excerptNote} onChange={(event) => setExcerptNote(event.target.value)} placeholder="记录你的判断或用途" /></label><div className="excerpt-actions"><button type="button" disabled={selection.length < 2} onClick={saveHighlight}><BookmarkSimple />高亮</button><button type="button" disabled={selection.length < 2} onClick={() => saveExcerpt("note")}><NotePencil />笔记</button><button type="button" disabled={selection.length < 2} onClick={() => saveExcerpt("evidence")}><BookmarkSimple />证据</button><button type="button" disabled={selection.length < 2 || translating} onClick={() => void translate()}><Translate />{translating ? "翻译中" : "翻译"}</button><span>{savedMessage}</span></div>{translation ? <div className="translation-card"><strong>选区翻译</strong><p>{translation}</p></div> : null}<label className="question-box"><span>你想问什么？</span><textarea value={question} onChange={(event) => setQuestion(event.target.value)} placeholder="例如：作者为什么采用这个设计？未选中文字时将基于全文回答" maxLength={800} /></label><button className="primary ask-button" disabled={question.trim().length < 2 || asking}>{asking ? <><ArrowsClockwise className="spin" />正在回答</> : <><Sparkle />{selection.trim().length >= 10 ? "基于选区回答" : "基于全文回答"}</>}</button></form>
         {error && document ? <div className="reader-error"><WarningCircle />{error}</div> : null}
         {answer ? <article className="answer-card"><header><span><Check /> AI 回答</span><small>{model} · 第 {pageNumber} 页</small></header><p>{answer}</p>{selection.trim() ? <blockquote>{selection}</blockquote> : null}</article> : null}
-        <section className="reader-history"><div className="section-heading"><div><span className="eyebrow">摘录与问答</span><h2>{excerpts.length} 条摘录 · {history.length} 次问答</h2></div></div>{excerpts.map((item) => <article className={`excerpt-card kind-${item.kind}`} key={item.id}><header><button onClick={() => setPageNumber(item.page)}>{item.kind === "evidence" || item.kind === "highlight" ? <BookmarkSimple /> : <NotePencil />}第 {item.page} 页</button><span><button className="icon-button subtle" onClick={() => setEditingExcerptId(item.id)} aria-label="编辑摘录"><NotePencil /></button><button className="icon-button subtle danger" onClick={() => deleteReaderExcerpt(item.id)} aria-label="删除摘录"><Trash /></button></span></header>{editingExcerptId === item.id ? <input defaultValue={item.note} autoFocus onBlur={(event) => { updateReaderExcerpt(item.id, { note: event.target.value, color: item.color }); setEditingExcerptId(""); }} onKeyDown={(event) => { if (event.key === "Enter") event.currentTarget.blur(); }} /> : <strong>{item.note || (item.kind === "evidence" ? "证据摘录" : item.kind === "highlight" ? "文本高亮" : "阅读笔记")}</strong>}<p>{item.text}</p></article>)}{history.map((item) => <article key={item.id}><button onClick={() => { setPageNumber(item.page); setSelection(item.selection); }}><Quotes />第 {item.page} 页</button><strong>{item.question}</strong><p>{item.answer}</p><footer><span>{item.model}</span><time>{new Date(item.createdAt).toLocaleString("zh-CN")}</time></footer></article>)}</section>
+        <section className="reader-history"><div className="section-heading"><div><span className="eyebrow">摘录与问答</span><h2>{excerpts.length} 条摘录 · {history.length} 次问答</h2></div></div>{excerpts.map((item) => <article className={`excerpt-card kind-${item.kind}`} key={item.id}><header><button onClick={() => jumpToPage(item.page)}>{item.kind === "evidence" || item.kind === "highlight" ? <BookmarkSimple /> : <NotePencil />}第 {item.page} 页</button><span><button className="icon-button subtle" onClick={() => setEditingExcerptId(item.id)} aria-label="编辑摘录"><NotePencil /></button><button className="icon-button subtle danger" onClick={() => deleteReaderExcerpt(item.id)} aria-label="删除摘录"><Trash /></button></span></header>{editingExcerptId === item.id ? <input defaultValue={item.note} autoFocus onBlur={(event) => { updateReaderExcerpt(item.id, { note: event.target.value, color: item.color }); setEditingExcerptId(""); }} onKeyDown={(event) => { if (event.key === "Enter") event.currentTarget.blur(); }} /> : <strong>{item.note || (item.kind === "evidence" ? "证据摘录" : item.kind === "highlight" ? "文本高亮" : "阅读笔记")}</strong>}<p>{item.text}</p></article>)}{history.map((item) => <article key={item.id}><button onClick={() => { jumpToPage(item.page); setSelection(item.selection); setSelectionPage(item.page); setSelectionRects([]); }}><Quotes />第 {item.page} 页</button><strong>{item.question}</strong><p>{item.answer}</p><footer><span>{item.model}</span><time>{new Date(item.createdAt).toLocaleString("zh-CN")}</time></footer></article>)}</section>
         </div>
-        {readerTab === "compare" ? <section className="compare-pane" aria-label="双语对照">
+        {readerTab === "compare" ? <section id="reader-compare-panel" role="tabpanel" aria-labelledby="reader-compare-tab" className="compare-pane" aria-label="双语对照">
           <div className="compare-toolbar">
+            {pageTranslationActive ? <button type="button" className="secondary-button" onClick={() => pageRunRef.current?.abort()}><X />取消本页翻译</button>
+              : <button type="button" className="secondary-button" disabled={compareContextRef.current?.page !== pageNumber || compareLoading || !compareTotal || comparePhase === "working" || Boolean(documentRunRef.current) || ocrProgress !== null} onClick={() => void translateCurrentPage()}><Translate />{compareDone === compareTotal && compareTotal ? "本页已翻译" : "翻译本页"}</button>}
             {documentJob?.stage === "parsing" || documentJob?.stage === "translating"
               ? <button type="button" className="secondary-button" onClick={cancelDocumentTranslation}><X />取消全文翻译</button>
               : documentJob?.stage === "cancelling"
                 ? <button type="button" className="secondary-button" disabled><X />正在取消…</button>
-                : <button type="button" className="primary" disabled={!document || comparePhase === "working" || documentJob?.stage === "done"} onClick={() => void translateWholeDocument()}><Translate />{documentJob?.stage === "done" ? "全文已翻译" : documentJob?.stage === "error" || documentJob?.stage === "cancelled" ? "继续翻译全文" : "精确解析并翻译全文"}</button>}
+                : <button type="button" className="primary" disabled={!document || pageTranslationActive || comparePhase === "working" || documentJob?.stage === "done"} onClick={() => void translateWholeDocument()}><Translate />{documentJob?.stage === "done" ? "全文已翻译" : documentJob?.stage === "error" || documentJob?.stage === "cancelled" ? "继续翻译全文" : "精确解析并翻译全文"}</button>}
             <span className="compare-progress" role="status" aria-live="polite">{documentJob
               ? `全文 ${documentJob.totalPages} 页 · 已完成 ${documentJob.completedPages} 页 · ${documentJob.stage === "parsing" ? `${parserProgress?.stage === "downloading" ? `首次准备：下载解析模型 ${parserProgress.completed}/${parserProgress.total} 组` : parserProgress?.stage === "starting" ? "正在检查本机解析模型…" : parserProgress?.stage === "queued" ? "等待本机解析任务…" : `正在解析第 ${documentJob.page} 页`}` : documentJob.stage === "translating" ? `正在翻译第 ${documentJob.page} 页 ${documentJob.completedBlocks}/${documentJob.totalBlocks} 项` : documentJob.stage === "done" ? "全部完成" : documentJob.stage === "cancelling" ? "正在取消" : documentJob.stage === "cancelled" ? "已取消" : "已暂停"} · 模型 ${documentJob.model}`
               : `当前第 ${pageNumber} / ${document?.numPages ?? 0} 页 · 已完成 ${compareDone} / ${compareTotal} 项`}</span>
             {!documentJob ? <small className="compare-progress">首次使用需联网下载解析模型，之后在本机复用。</small> : null}
-            {documentJob?.error || compareError || error ? <span className="compare-error-text">{documentJob?.error || compareError || error}</span> : null}
-            <button type="button" className="secondary-button compare-notes-button" onClick={() => setReaderTab("notes")}><NotePencil />批注与问答</button>
+            {documentJob?.notice ? <span className="compare-notice-text" role="status">{documentJob.notice}</span> : null}
+            {documentJob?.error || compareError || error ? <span className="compare-error-text" role="alert">{compareError || error || documentJob?.error}</span> : null}
+            <label className="compare-scroll-toggle"><input type="checkbox" checked={linkedScroll} onChange={(event) => setLinkedScroll(event.target.checked)} />双屏关联</label>
           </div>
           <div className="compare-page-stage" ref={compareStageRef}>
-            {compareLoading ? <LoadingState title="正在读取本页文本" /> : null}
-            {!compareLoading && !compareBlocks.length ? (pdfPage
-              ? <EmptyState icon={<Scan />} title="这一页没有可翻译的文字" description="扫描版 PDF 需要先做 OCR，识别结果只保存在本机。" action={<button type="button" className="primary" disabled={!pdfPage || ocrProgress !== null} onClick={() => void runOcr()}><Scan />{ocrProgress !== null ? `OCR ${Math.round(ocrProgress * 100)}%` : "OCR 本页"}</button>} />
-              : <EmptyState icon={<FilePdf />} title="等待 PDF 加载" description="左侧 PDF 加载完成后，即可按段对照阅读。" />) : null}
-            {compareBlocks.length ? <div className="translation-sheet" style={pdfPage ? { width: pdfPage.getViewport({ scale }).width, minHeight: pdfPage.getViewport({ scale }).height } : undefined}>
-              <div className="translation-sheet-heading"><span>译文 · 第 {pageNumber} 页</span><small>{compareParser === "mineru" ? "MinerU 本地解析" : compareSource === "ocr" ? "本机 OCR 原文" : "对应左侧原文页"} · {compareBlocks.find((block) => block.status === "done" && block.model && block.model !== "原文数据")?.model ?? compareLanguage}</small></div>
-              <div className="translation-flow" data-columns={compareColumns}>
-                {compareColumns === 2 ? <>
-                  {renderCompareList(compareEntries.filter(({ block }) => block.column === "full"))}
-                  <div className="translation-columns">
-                    <div>{renderCompareList(compareEntries.filter(({ block }) => block.column === 0))}</div>
-                    <div>{renderCompareList(compareEntries.filter(({ block }) => block.column === 1))}</div>
-                  </div>
-                </> : renderCompareList(compareEntries)}
-              </div>
-            </div> : null}
+            {document ? Array.from({ length: document.numPages }, (_, index) => index + 1).map((page) => <ContinuousPage key={page} page={page} activePage={pageNumber} width={pageSize.width * scale} height={pageSize.height * scale} scale={scale} stage={compareStageRef}>
+              {(visible) => <ContinuousTranslationPage document={document} paperId={paperId} pageNumber={page} visible={visible} width={pageSize.width * scale} height={pageSize.height * scale} scale={scale} revision={`${ocrNonce}:${documentRefreshNonce}`} active={page === pageNumber && !compareLoading && compareContextRef.current?.page === page ? { blocks: compareBlocks, columns: compareColumns, language: compareLanguage, parser: compareParser, source: compareSource } : undefined} onAnnotate={annotateCompareBlock} onRetry={page === pageNumber ? (index) => void retryCompareBlock(index) : undefined} empty={page === pageNumber ? <EmptyState icon={<Scan />} title="这一页没有可翻译的文字" description="扫描版 PDF 请先 OCR 本页，再点击“翻译本页”。英文识别资源已内置，识别在本机完成。" action={<button type="button" className="primary" disabled={!pdfPage || pdfPage.pageNumber !== pageNumber || ocrProgress !== null} onClick={() => void runOcr()}><Scan />{ocrLabel}</button>} /> : undefined} />}
+            </ContinuousPage>) : <EmptyState icon={<FilePdf />} title="等待 PDF 加载" description="左侧 PDF 加载完成后，即可按段对照阅读。" />}
+
           </div>
         </section> : null}
       </aside>

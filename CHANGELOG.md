@@ -8,6 +8,50 @@ ArguMesh（论脉）的版本历史。README 只保留指向本文件的入口�
 
 ---
 
+## Unreleased (2026-10-11) — Research Agent turn recovery
+
+- Stop and dispose interrupted/failed Pi sessions before retrying, restore bounded saved history, and wait for SDK retries to finish before completing a turn. Live turns are no longer marked failed after 25 seconds; duplicate submissions cannot mutate a running session. Add SSE keepalives, a five-minute timeout, terminal-event stream cleanup and page-exit cancellation. Preserve message/action history, show Chinese busy/timeout guidance, prevent late replies from reviving failed turns, and enforce one whitelist write per turn. No database migration.
+- 修复 Research Agent 连接中断后重试反复提示 “Agent is already processing”：停止旧会话并恢复已保存的上下文，等待 SDK 后台重试结束后再完成回合。正常长回合不再因超过 25 秒被误判失败，重复提交不修改运行中的会话。增加流心跳、5 分钟超时、终止事件清理与页面离开取消，保留消息和动作历史；迟到回复不能恢复失败回合，忙碌/超时提示改为中文，每轮最多一个白名单写入动作。无数据库迁移。
+
+## Unreleased (2026-10-11) — Matrix source navigation and batch confirmation
+
+- Fixed matrix Open source using an asynchronous popup that could fail in desktop WebView. Source links now enter the in-app PDF reader in the correct project and use readable evidence page labels ahead of the saved reading position, clamped to the PDF page count.
+- Added per-paper and entire-matrix confirmation with an explicit scope/count dialog. Batch confirmation locks sourced drafts and skips confirmed, locked, missing, conflicting and unextracted cells; entire-matrix scope includes search-hidden papers. Server updates are transactional, validate every requested cell's membership and recheck eligibility; local matrices use a single state update. Source content stays unchanged and existing AI overwrite guards remain active. No database migration.
+- 修复证据矩阵「打开原文」在桌面 WebView 中弹窗失效，改为进入正确项目的应用内阅读器；可识别的证据页码优先于上次阅读位置，并限制在实际 PDF 页数内。新增「确认本篇」「确认整个矩阵」，先展示范围、数量与跳过规则，再确认并锁定有来源的草稿。全矩阵包含搜索隐藏的文献；已确认、锁定、缺失、冲突与待提取内容不变。服务端整批事务写入并校验范围，本地矩阵一次更新，保留来源与 AI 覆盖守卫，无数据库迁移。
+
+## Unreleased (2026-10-11) — Continuous reader scrolling
+
+- Replaced previous/next pagination with continuous vertical sheets for the PDF and translation panes. The page indicator follows scrolling; linked scrolling aligns page boundaries even when translated pages have different heights. Outline/search/annotation jumps and last-page restoration remain available.
+- Render only nearby canvases and translated sheets while retaining page heights; scrolling only reads existing page caches, and selected passages keep their actual source-page identity. No database migration or translation-cache invalidation.
+- 阅读器改为原文与译文纸页连续下滑，移除上一页/下一页按钮；页码随滚动更新，双屏关联按同页位置同步，译文高度不同也能跨页对照。保留目录、搜索、批注与页码跳转及上次页码恢复；只渲染附近页面，滚动只读缓存、不触发 AI，划词保留实际所属页。无需数据库迁移，已有译文缓存继续复用。
+
+## Unreleased (2026-10-11) — OCR and reader recovery
+
+- Bundled the English OCR worker, embedded WASM core and language data for local Web/desktop use. Added distinct preparation/loading/recognition states, bounded canvas size, rendering and recognition timeouts, and cancellation. Short saved OCR text remains usable for translation.
+- Added current-page translation from native or OCR text without requiring MinerU; requests remain bounded to page passages, preserve provenance and completed translations, and can be cancelled. Precise whole-paper parsing can fall back to readable native/OCR page text with a visible approximate-layout notice.
+- Kept reader tabs visible independently of translation controls; paused/failed translation no longer hides the route back to annotations/Q&A. Added actionable, safe model API failure messages. No database migration; OCR assets are included in rebuilt bundles/installers.
+- 英文 OCR 资源随构建内置，移除运行时 CDN 下载；显示准备、加载引擎与识别阶段，限制画布大小，加入渲染/识别超时和取消。短 OCR 文字也可翻译。新增“翻译本页”，直接处理原生或 OCR 本页分段，保留来源与已完成译文；精确解析失败时可用已有文字继续全文翻译并显著提示近似版面。
+- 阅读页签始终可用，暂停或失败不影响切回批注与问答；模型调用失败显示连接、密钥/权限、额度/限流、超时等可操作原因。无需数据库迁移，新 OCR 资源需重新构建应用/安装包后生效。
+
+## Unreleased (2026-10-11) — Paper Card model display
+
+- Removed the hardcoded `step-3.7-flash` fallback and the use of previous-card provenance in the Paper Card generation notice. The UI now reads the active model configuration and refreshes it before each generation; completed drafts use the model returned by the server. Shared model lookup now honors saved settings over environment defaults. No database migration.
+- 修复 Paper Card 已接入 `step-5-preview` 却提示 `step-3.7-flash` 的问题：生成按钮与进度改为读取当前配置，每次生成前刷新；完成后以服务端返回的模型记录来源，旧卡片的历史模型保持原样。共享模型读取优先使用设置页配置，无数据库迁移。
+
+## Unreleased (2026-10-11) — Paper-style translation
+
+- Reworked the translated sheet following the supplied Little Green Whale examples: centered title, continuous serif prose, source columns and spanning figures/tables in their corresponding vertical sections. Linked scrolling can be toggled.
+- Keep figure, table and equation pixels intact; translate prose, captions and notes instead of OCR labels or table cells. Preserve original merged cells when table pixels are unavailable. Academic prompts preserve names, citations and terminology; validated translation responses carry generation timestamps, retained with source/model details in the local cache and available on hover.
+- No database migration. Parser geometry and the new translation flow use separate cache versions; previous caches remain, and the first new run reparses/retranslates pages.
+- 参考用户提供的小绿鲸示例，译文改为标题居中、衬线正文连续排版、单双栏与跨栏图表按原页位置穿插；支持切换双屏关联。图表与公式保留原貌，仅翻译正文、图表说明与注释，不再自动翻译图中文字和表格单元格；译文保留来源、模型和生成时间。无数据库迁移，新解析与译文使用独立缓存，旧缓存保留，首次需重新解析和翻译。
+
+## Unreleased (2026-10-11) — AI connection check
+
+- Fixed Settings showing “environment not detected” when a saved custom AI configuration is active. The badge now shows the actual configuration source and model; clearing custom settings refreshes the environment fallback. `AI_PROVIDERS` now works without requiring legacy `STEPFUN_*` variables.
+- Added a cancellable connection check using the same OpenAI-compatible / Anthropic Messages request path as AI features. It sends a fixed short message, displays model, API format, latency and timestamp, and gives safe failure hints without exposing API keys. Edited settings must be saved first; the check has a 30-second timeout. No database migration is required.
+- 修复已保存自定义 AI 配置却显示「未检测到」的问题，改为展示实际配置来源与模型；清除配置后刷新环境回退，并修复单独使用 `AI_PROVIDERS` 时的检测。
+- 新增可取消的「连接自检」，通过固定短消息真实调用验证连接，展示模型、接口类型、耗时与检查时间；按密钥/权限、额度/限流、接口/模型、网络与超时提示失败原因，不回显上游敏感错误。修改配置需先保存，30 秒超时，无数据库迁移。
+
 ## Docs (2026-10-07) — Homepage content corrections
 
 - Restored the reproduced reading status, clarified desktop-specific host features, split the reader description, and distinguished published v3.3.0 downloads from unreleased v3.3.1 source changes.
