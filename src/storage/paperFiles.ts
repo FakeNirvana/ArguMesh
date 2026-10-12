@@ -5,6 +5,14 @@ const PAGE_TRANSLATION_STORE = "page-translations";
 const DATABASE_VERSION = 3;
 const LEGACY_OWNER = "chen-fuyuan";
 
+function usesSharedCache(): boolean {
+  return document.querySelector('meta[name="argumesh-local"]') !== null;
+}
+
+function sharedPaperCacheUrl(paperId: string): string {
+  return `/api/workspace/papers/${encodeURIComponent(paperId)}`;
+}
+
 function currentAccountId() {
   return window.sessionStorage.getItem("paperidea_session_account") ?? "signed-out";
 }
@@ -62,6 +70,10 @@ export interface PageTranslationRecord {
 
 /** 删除某篇论文的本地 PDF 与 OCR 页文本(与云端删除配合,替代旧"归档")。 */
 export async function deletePaperFiles(paperId: string): Promise<void> {
+  if (usesSharedCache()) {
+    const response = await fetch(`${sharedPaperCacheUrl(paperId)}/cache`, { method: "DELETE" });
+    if (!response.ok) throw new Error("删除共享阅读缓存失败");
+  }
   const database = await openDatabase();
   try {
     await Promise.all([
@@ -150,6 +162,10 @@ function pageTextKey(paperId: string, page: number) {
 }
 
 export async function savePaperPageText(paperId: string, page: number, value: string): Promise<void> {
+  if (usesSharedCache()) {
+    const response = await fetch(`${sharedPaperCacheUrl(paperId)}/ocr/${page}`, { method: "PUT", headers: { "content-type": "text/plain; charset=utf-8" }, body: value });
+    if (!response.ok) throw new Error("保存共享 OCR 文本失败");
+  }
   const database = await openDatabase();
   try {
     await new Promise<void>((resolve, reject) => {
@@ -164,14 +180,19 @@ export async function savePaperPageText(paperId: string, page: number, value: st
 }
 
 export async function getPaperPageTexts(paperId: string): Promise<Record<number, string>> {
+  let shared: Record<number, string> = {};
+  if (usesSharedCache()) {
+    const response = await fetch(`${sharedPaperCacheUrl(paperId)}/ocr`);
+    if (response.ok) shared = (await response.json() as { data: Record<number, string> }).data;
+  }
   const database = await openDatabase();
   try {
-    return await new Promise((resolve, reject) => {
+    const texts = await new Promise<Record<number, string>>((resolve, reject) => {
       const request = database.transaction(PAGE_TEXT_STORE, "readonly").objectStore(PAGE_TEXT_STORE).openCursor();
       const result: Record<number, string> = {};
       request.onsuccess = () => {
         const cursor = request.result;
-        if (!cursor) return resolve(result);
+        if (!cursor) return resolve({ ...result, ...shared });
         const key = String(cursor.key);
         const accountPrefix = `${currentAccountId()}:${paperId}:`;
         const legacyPrefix = `${paperId}:`;
@@ -188,6 +209,13 @@ export async function getPaperPageTexts(paperId: string): Promise<Record<number,
       };
       request.onerror = () => reject(request.error ?? new Error("读取 OCR 文本失败"));
     });
+    if (usesSharedCache()) {
+      await Promise.all(Object.entries(texts).filter(([page]) => shared[Number(page)] === undefined).map(async ([page, value]) => {
+        const response = await fetch(`${sharedPaperCacheUrl(paperId)}/ocr/${page}`, { method: "PUT", headers: { "content-type": "text/plain; charset=utf-8" }, body: value });
+        if (!response.ok) throw new Error("迁移共享 OCR 文本失败");
+      }));
+    }
+    return texts;
   } finally {
     database.close();
   }
@@ -215,19 +243,39 @@ function readPageTranslationRecord(value: unknown): PageTranslationRecord | null
  * 不保证它对应的是当前这份 PDF(换过 PDF 后页码不变、文本已变)。
  */
 export async function getPageTranslations(paperId: string, page: number, targetLanguage: string): Promise<PageTranslationRecord | null> {
+  if (usesSharedCache()) {
+    const url = `${sharedPaperCacheUrl(paperId)}/translations/${page}?language=${encodeURIComponent(targetLanguage)}`;
+    const response = await fetch(url);
+    if (response.ok) {
+      const shared = (await response.json() as { data: unknown }).data;
+      const record = readPageTranslationRecord(shared);
+      if (record) return record;
+    }
+  }
   const database = await openDatabase();
   try {
-    return await new Promise((resolve, reject) => {
+    const cached = await new Promise<PageTranslationRecord | null>((resolve, reject) => {
       const request = database.transaction(PAGE_TRANSLATION_STORE, "readonly").objectStore(PAGE_TRANSLATION_STORE).get(pageTranslationKey(paperId, page, targetLanguage));
       request.onsuccess = () => resolve(readPageTranslationRecord(request.result));
       request.onerror = () => reject(request.error ?? new Error("读取对照译文失败"));
     });
+    if (cached && usesSharedCache()) {
+      const url = `${sharedPaperCacheUrl(paperId)}/translations/${page}?language=${encodeURIComponent(targetLanguage)}`;
+      const response = await fetch(url, { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify(cached) });
+      if (!response.ok) throw new Error("迁移共享译文失败");
+    }
+    return cached;
   } finally {
     database.close();
   }
 }
 
 export async function savePageTranslations(paperId: string, page: number, targetLanguage: string, record: PageTranslationRecord): Promise<void> {
+  if (usesSharedCache()) {
+    const url = `${sharedPaperCacheUrl(paperId)}/translations/${page}?language=${encodeURIComponent(targetLanguage)}`;
+    const response = await fetch(url, { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify(record) });
+    if (!response.ok) throw new Error("保存共享译文失败");
+  }
   const database = await openDatabase();
   try {
     await new Promise<void>((resolve, reject) => {

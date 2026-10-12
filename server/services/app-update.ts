@@ -30,13 +30,18 @@ export function isNewerVersion(latest: string, current: string): boolean {
   return false;
 }
 
-export function readRelease(value: unknown, version = currentVersion): AppUpdate {
+export function readRelease(value: unknown, version = currentVersion, platform = process.platform): AppUpdate {
   const release = releaseSchema.parse(value);
   if (release.draft || release.prerelease || !/^v\d+\.\d+\.\d+$/.test(release.tag_name)) throw new Error("Invalid stable release");
   const latestVersion = release.tag_name.slice(1);
   const releaseUrl = `${REPOSITORY}/releases/tag/${release.tag_name}`;
   if (!isNewerVersion(latestVersion, version)) return { currentVersion: version, latestVersion, status: "up_to_date", releaseUrl };
-  const name = `ArguMesh_${latestVersion}_x64-setup.exe`;
+  const name = platform === "darwin"
+    ? `ArguMesh_${latestVersion}_aarch64.dmg`
+    : platform === "win32"
+      ? `ArguMesh_${latestVersion}_x64-setup.exe`
+      : "";
+  if (!name) throw new Error("Installer unavailable for this platform");
   const downloadUrl = `${REPOSITORY}/releases/download/${release.tag_name}/${name}`;
   if (!release.assets.some((asset) => asset.name === name && asset.browser_download_url === downloadUrl)) throw new Error("Installer unavailable");
   return { currentVersion: version, latestVersion, status: "available", releaseUrl, downloadUrl };

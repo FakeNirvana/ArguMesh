@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import * as api from "../api";
 import type { PageRect } from "../pdf/selection";
 import { canBatchConfirm } from "../matrix/review";
@@ -307,8 +307,14 @@ function readStoredData(storageKey: string, migrateLegacy: boolean): WorkspaceDa
     const value = window.localStorage.getItem(storageKey)
       ?? (migrateLegacy ? window.localStorage.getItem(LEGACY_STORAGE_KEY) : null);
     if (!value) return initialData;
-    const stored = JSON.parse(value) as Partial<WorkspaceData>;
-    return {
+    return normalizeStoredData(JSON.parse(value) as Partial<WorkspaceData>);
+  } catch {
+    return initialData;
+  }
+}
+
+function normalizeStoredData(stored: Partial<WorkspaceData>): WorkspaceData {
+  return {
       ...initialData,
       ...stored,
       projects: stored.projects ?? initialData.projects,
@@ -323,10 +329,7 @@ function readStoredData(storageKey: string, migrateLegacy: boolean): WorkspaceDa
       tasks: stored.tasks ?? [],
       trash: stored.trash ?? [],
       pendingSync: stored.pendingSync ?? [],
-    };
-  } catch {
-    return initialData;
-  }
+  };
 }
 
 function mergeRemoteProjects(localProjects: LocalProject[], remoteProjects: api.RemoteProject[]): LocalProject[] {
@@ -353,13 +356,46 @@ const WorkspaceContext = createContext<WorkspaceContextValue | null>(null);
 
 export function WorkspaceProvider({ children }: { children: ReactNode }) {
   const storageKey = WORKSPACE_STORAGE_KEY;
+  const sharedLocalWorkspace = useMemo(() => document.querySelector('meta[name="argumesh-local"]') !== null, []);
   const [data, setData] = useState<WorkspaceData>(() => readStoredData(storageKey, true));
+  const [ready, setReady] = useState(!sharedLocalWorkspace);
+  const [sharedAvailable, setSharedAvailable] = useState(false);
+  const saveQueue = useRef(Promise.resolve());
 
   useEffect(() => {
+    if (!sharedLocalWorkspace) return;
+    let cancelled = false;
+    fetch("/api/workspace/local").then(async (response) => {
+      if (!response.ok) throw new Error("无法读取桌面工作区");
+      return response.json() as Promise<{ data: Partial<WorkspaceData> | null }>;
+    }).then(({ data: stored }) => {
+      if (!cancelled) {
+        if (stored) setData(normalizeStoredData(stored));
+        setSharedAvailable(true);
+      }
+    }).catch((error) => {
+      console.error("桌面工作区读取失败", error);
+    }).finally(() => {
+      if (!cancelled) setReady(true);
+    });
+    return () => { cancelled = true; };
+  }, [sharedLocalWorkspace]);
+
+  useEffect(() => {
+    if (!ready) return;
     window.localStorage.setItem(storageKey, JSON.stringify(data));
-  }, [data, storageKey]);
+    if (sharedAvailable) {
+      const snapshot = JSON.stringify(data);
+      saveQueue.current = saveQueue.current.catch(() => {}).then(async () => {
+        const response = await fetch("/api/workspace/local", { method: "PUT", headers: { "content-type": "application/json" }, body: snapshot });
+        if (!response.ok) throw new Error(`工作区保存失败 (${response.status})`);
+      });
+      void saveQueue.current.catch((error) => console.error("桌面工作区保存失败", error));
+    }
+  }, [data, storageKey, sharedAvailable, ready]);
 
   useEffect(() => {
+    if (!ready) return;
     // 单用户本地版:无鉴权,直接同步本地工作区与本地 API。
     let cancelled = false;
     api.listProjects(true).then(async ({ projects }) => {
@@ -425,11 +461,33 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
         });
         return { ...current, papers: merged };
       });
+      try {
+        const { matrices: listed } = await api.listMatrices();
+        const remoteMatrices = await Promise.all(listed.map(async (item): Promise<LocalMatrix> => {
+          const detail = await api.getMatrixById(item.id);
+          return {
+            id: item.id, projectId: item.projectId, name: item.name,
+            description: item.description ?? "", createdAt: item.createdAt,
+            paperIds: detail.papers.map((paper) => paper.id),
+            dimensions: detail.groups.flatMap((group) => group.rows),
+            cells: detail.cells, source: "server",
+          };
+        }));
+        if (!cancelled) setData((current) => {
+          const local = new Map(current.matrices.map((matrix) => [matrix.id, matrix]));
+          return { ...current, matrices: [
+            ...remoteMatrices.map((matrix) => ({ ...matrix, ...local.get(matrix.id), source: "server" as const })),
+            ...current.matrices.filter((matrix) => matrix.source === "local" && !remoteMatrices.some((remote) => remote.id === matrix.id)),
+          ] };
+        });
+      } catch {
+        // DB 暂时不可用时保留已加载的本地矩阵。
+      }
     }).catch(() => {
       // 本地工作区仍可使用；下次登录或刷新时会再次尝试从云端恢复。
     });
     return () => { cancelled = true; };
-  }, []);
+  }, [ready]);
 
   /**
    * 把一条失败的后台同步任务入队,等待用户在横幅处重试。
@@ -869,7 +927,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     },
   }), [data]);
 
-  return <WorkspaceContext.Provider value={value}>{children}</WorkspaceContext.Provider>;
+  return ready ? <WorkspaceContext.Provider value={value}>{children}</WorkspaceContext.Provider> : null;
 }
 
 export function useWorkspace() {

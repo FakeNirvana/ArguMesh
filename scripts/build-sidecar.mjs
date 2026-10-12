@@ -9,7 +9,7 @@
 //   dist/               前端产物(pnpm run build 的输出,需先执行)
 //   template/           仅含表结构的空库,首次启动由桌面壳复制到用户数据目录
 //   .env.example        可选配置说明,运行时复制为 .env 才生效
-//   node.exe            由 --node-exe 拷入;不传则跳过(由 tauri.conf 的 externalBin 提供)
+//   node(.exe)         由 --node-exe 拷入(桌面打包必需)
 //
 // 关键约束(见 docs/DISTRIBUTION-RESEARCH-2026-09-20.md 第 6 节「复核修正」):
 //   server/node.ts 的 serveStatic({ root: "./dist" }) 以 process.cwd() 解析 ——
@@ -42,9 +42,9 @@ const outDir = path.join(root, "build", "sidecar");
  *     只有 ~几百 KB,直接让 esbuild 打包即可;其 .node(win32-console-mode)在产物里引用计数为 0。
  * 加新条目前先跑下面 externalPackagesFromMetafile():它会把产物里所有外部依赖列出来,漏一个就报错。
  */
-const NATIVE_PACKAGES = [
-  "@libsql/win32-x64-msvc", // SQLite 驱动(@libsql/client → libsql → 这里)
-];
+const NATIVE_PACKAGES = [process.platform === "darwin" && process.arch === "arm64"
+  ? "@libsql/darwin-arm64"
+  : "@libsql/win32-x64-msvc"]; // SQLite 驱动(@libsql/client → libsql → 这里)
 
 const require_ = createRequire(import.meta.url);
 
@@ -156,15 +156,20 @@ async function collectNativeFiles(dir) {
 
 const nodeExeArg = process.argv.indexOf("--node-exe");
 const nodeExe = nodeExeArg > -1 ? process.argv[nodeExeArg + 1] : null;
+if (!nodeExe) throw new Error("[sidecar] --node-exe is required for desktop bundles");
 
 console.log(`[sidecar] 输出目录: ${path.relative(root, outDir)}`);
 
 // A desktop build must carry the private parser, never silently depend on developer PATH.
 const parserDir = path.join(root, "build", "mineru-runtime");
-for (const file of ["python.exe", "runner.py", "runtime.json", "Lib/site-packages/mineru/__init__.py"]) {
+const parserFiles = process.platform === "darwin"
+  ? ["bin/python3.13", "runner.py", "runtime.json", "lib/python3.13/site-packages/mineru/__init__.py"]
+  : ["python.exe", "runner.py", "runtime.json", "Lib/site-packages/mineru/__init__.py"];
+for (const file of parserFiles) {
   if (!(await exists(path.join(parserDir, file)))) throw new Error("[sidecar] Missing portable MinerU runtime; run pnpm run build:mineru first");
 }
-const parserCheck = spawnSync(path.join(parserDir, "python.exe"), ["-I", path.join(parserDir, "runner.py"), "check"], { stdio: "inherit", windowsHide: true });
+const parserPython = path.join(parserDir, process.platform === "darwin" ? "bin/python3.13" : "python.exe");
+const parserCheck = spawnSync(parserPython, ["-I", path.join(parserDir, "runner.py"), "check"], { stdio: "inherit", windowsHide: true });
 if (parserCheck.status !== 0) throw new Error("[sidecar] Portable MinerU validation failed");
 if (path.dirname(outDir) !== path.join(root, "build")) throw new Error("Unsafe sidecar build path");
 
@@ -311,11 +316,12 @@ console.log(`  ✓ template/argumesh.db  ${(templateBytes / 1024).toFixed(0)} KB
 // 6. 可选配置说明
 await cp(path.join(root, ".env.example"), path.join(outDir, ".env.example"));
 
-// 7. node.exe(可选):本地验证用;正式安装包里由 tauri.conf 的 externalBin 提供
+// 7. 裸 Node 可执行文件。正式桌面打包必须传 --node-exe。
 if (nodeExe) {
   if (!(await exists(nodeExe))) throw new Error(`[sidecar] --node-exe 指向的文件不存在: ${nodeExe}`);
-  await cp(nodeExe, path.join(outDir, "node.exe"));
-  console.log(`[sidecar] 已拷入 node.exe ← ${nodeExe}`);
+  const binaryName = process.platform === "win32" ? "node.exe" : "node";
+  await cp(nodeExe, path.join(outDir, binaryName));
+  console.log(`[sidecar] 已拷入 ${binaryName} ← ${nodeExe}`);
 }
 
 // 8. 自述:写清楚这个目录怎么被启动(桌面壳与排错都读它)
@@ -327,12 +333,12 @@ await writeFile(
     "",
     "启动方式(桌面壳 / 手动一致):",
     "  cwd = 本目录",
-    "  node.exe server.mjs",
+    `  ${process.platform === "win32" ? "node.exe" : "node"} server.mjs`,
     "",
     "环境变量:",
     "  PORT          覆盖端口,默认 8787;PORT=0 让系统分配(桌面壳推荐,避免端口冲突)",
     "  DATABASE_URL  数据库位置,默认 file:./data/argumesh.db。桌面壳应把它指到",
-    "                %LOCALAPPDATA%\\ArguMesh\\data\\argumesh.db,并在首次启动时把",
+    `                ${process.platform === "win32" ? "%LOCALAPPDATA%\\ArguMesh" : "~/Library/Application Support/ArguMesh"}/data/argumesh.db,并在首次启动时把`,
     "                template/argumesh.db 复制过去 —— 这样卸载/升级不会动到用户数据。",
     "",
     "为什么必须把 cwd 设到本目录:",

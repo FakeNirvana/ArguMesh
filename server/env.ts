@@ -1,8 +1,13 @@
 import { mkdirSync } from "node:fs";
-import { dirname } from "node:path";
+import { homedir } from "node:os";
+import { dirname, join } from "node:path";
 import type { AppBindings } from "./types";
 
-const DEFAULT_DATABASE_URL = "file:./data/argumesh.db";
+function defaultDataDirectory(): string {
+  if (process.platform === "darwin") return join(homedir(), "Library", "Application Support", "ArguMesh");
+  if (process.platform === "win32") return join(process.env.LOCALAPPDATA ?? join(homedir(), "AppData", "Local"), "ArguMesh");
+  return join(process.env.XDG_DATA_HOME ?? join(homedir(), ".local", "share"), "ArguMesh");
+}
 
 /**
  * 本地文件库需要父目录存在(libSQL 不会自动创建目录;file: URL 相对进程 cwd 解析)。
@@ -21,10 +26,12 @@ function ensureDatabaseDirectory(databaseUrl: string): void {
 
 /** 从 process.env 组装运行时配置(server/node.ts 与 scripts 共用)。 */
 export function loadBindings(): AppBindings {
-  const databaseUrl = process.env.DATABASE_URL ?? DEFAULT_DATABASE_URL;
+  const dataDirectory = process.env.ARGUMESH_DATA_DIR ?? defaultDataDirectory();
+  const databaseUrl = process.env.DATABASE_URL ?? `file:${join(dataDirectory, "data", "argumesh.db")}`;
   if (databaseUrl.startsWith("file:")) ensureDatabaseDirectory(databaseUrl);
   return {
     ARGUMESH_DESKTOP: process.env.ARGUMESH_DESKTOP,
+    ARGUMESH_DATA_DIR: dataDirectory,
     DATABASE_URL: databaseUrl,
     DATABASE_AUTH_TOKEN: process.env.DATABASE_AUTH_TOKEN,
     STEPFUN_BASE_URL: process.env.STEPFUN_BASE_URL,

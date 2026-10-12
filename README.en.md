@@ -185,7 +185,9 @@ Troubleshooting entry point: `%LOCALAPPDATA%\ArguMesh\sidecar.log` — it record
 
 ### Not on Windows?
 
-Run it from source instead — see [Deployment](#deployment) below (`pnpm install` → `pnpm run db:seed` → `pnpm run dev`), or paste the [Deploy with AI](#deploy-with-ai) prompt into a coding agent.
+On an **Apple Silicon Mac**, you can build a local `.dmg` from source using [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) §3. This is a local validation build and is not yet on GitHub Releases. The Mac bundle includes private Node, Python and MinerU runtimes; the parsing models download on first precise translation. The Mac app and locally started web server share the database, workspace file and reading cache (OCR text and translations) under `~/Library/Application Support/ArguMesh`, including across desktop restarts on a new port. The Mac build has no Apple Developer signature or notarization, so you must approve its first launch in macOS.
+
+On other platforms, run it from source — see [Deployment](#deployment) below (`pnpm install` → `pnpm run db:seed` → `pnpm run dev`), or paste the [Deploy with AI](#deploy-with-ai) prompt into a coding agent.
 
 The desktop and web builds share the core research workflows. The Tauri desktop host also provides a local sidecar, an installer and update reminders. To build it yourself, follow the recipe in [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) §3.
 

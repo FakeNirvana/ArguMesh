@@ -6,7 +6,10 @@ import * as nativePicker from "../../server/services/native-picker";
 
 const release = (version = "3.4.0") => ({
   tag_name: `v${version}`, draft: false, prerelease: false,
-  assets: [{ name: `ArguMesh_${version}_x64-setup.exe`, browser_download_url: `https://github.com/Fyuan0206/ArguMesh/releases/download/v${version}/ArguMesh_${version}_x64-setup.exe` }],
+  assets: [
+    { name: `ArguMesh_${version}_x64-setup.exe`, browser_download_url: `https://github.com/Fyuan0206/ArguMesh/releases/download/v${version}/ArguMesh_${version}_x64-setup.exe` },
+    { name: `ArguMesh_${version}_aarch64.dmg`, browser_download_url: `https://github.com/Fyuan0206/ArguMesh/releases/download/v${version}/ArguMesh_${version}_aarch64.dmg` },
+  ],
 });
 afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 describe("application updates", () => {
@@ -18,12 +21,13 @@ describe("application updates", () => {
     expect(readRelease(release("3.2.5"), "3.3.0").status).toBe("up_to_date");
   });
   it("requires a trusted installer asset for the new stable release", () => {
-    expect(readRelease(release(), "3.3.0").status).toBe("available");
+    expect(readRelease(release(), "3.3.0", "win32").downloadUrl).toContain("_x64-setup.exe");
+    expect(readRelease(release(), "3.3.0", "darwin").downloadUrl).toContain("_aarch64.dmg");
     expect(() => readRelease({ ...release(), draft: true })).toThrow();
     expect(() => readRelease({ ...release(), prerelease: true })).toThrow();
     expect(() => readRelease({ ...release(), assets: [] })).toThrow();
     const unsafe = release(); unsafe.assets[0].browser_download_url = "https://example.com/installer.exe";
-    expect(() => readRelease(unsafe)).toThrow();
+    expect(() => readRelease(unsafe, "3.3.0", "win32")).toThrow();
   });
   it("does not contact GitHub automatically from the web host", async () => {
     const fetchMock = vi.fn(); vi.stubGlobal("fetch", fetchMock);
@@ -48,7 +52,7 @@ describe("application updates", () => {
     const open = vi.spyOn(nativePicker, "openNativePath").mockResolvedValue();
     const request = (body: unknown, desktop = "1") => systemRoutes.request("/system/update/open", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) }, { DATABASE_URL: "file:unused", ARGUMESH_DESKTOP: desktop });
     expect((await request({ target: "download" })).status).toBe(200);
-    expect(open.mock.calls[0][0]).toBe(release().assets[0].browser_download_url);
+    expect(open.mock.calls[0][0]).toBe(release().assets[process.platform === "darwin" ? 1 : 0].browser_download_url);
     expect((await request({ target: "download", url: "https://example.com" })).status).toBe(400);
     expect((await request({ target: "download" }, "")).status).toBe(400);
     expect(open).toHaveBeenCalledTimes(1);

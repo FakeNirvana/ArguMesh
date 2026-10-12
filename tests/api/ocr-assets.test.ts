@@ -14,5 +14,9 @@ it("构建所需的 OCR worker、内嵌 WASM 核心和英文数据均存在本�
 
 it("桌面安装包保留 OCR 子目录供 sidecar 本地提供", async () => {
   const config = JSON.parse(await readFile(new URL("../../src-tauri/tauri.conf.json", import.meta.url), "utf8"));
-  expect(config.bundle.resources["../build/sidecar/dist/ocr/*"]).toBe("sidecar/dist/ocr/");
+  const resources = config.bundle.resources as Record<string, string>;
+  expect(
+    resources["../build/sidecar/dist/ocr/*"] === "sidecar/dist/ocr/"
+    || resources["../build/sidecar/"] === "sidecar/",
+  ).toBe(true);
 });

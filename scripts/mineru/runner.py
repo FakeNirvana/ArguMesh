@@ -65,8 +65,8 @@ def main():
         ensure_backend_dependencies("pipeline")
         from mineru.backend.pipeline import model_init  # Validate the complete inference import chain.
         assert version("mineru") == "3.4.2"
-        assert "+cpu" in torch.__version__
         if sys.platform == "win32":
+            assert "+cpu" in torch.__version__
             import ctypes
             # A build machine's System32 DLL must not mask a missing private runtime.
             filename = ctypes.windll.kernel32.GetModuleFileNameW
@@ -76,6 +76,8 @@ def main():
                 buffer = ctypes.create_unicode_buffer(32768)
                 assert filename(library._handle, buffer, len(buffer))
                 assert Path(buffer.value).resolve().parent == Path(sys.executable).resolve().parent, name
+        elif sys.platform == "darwin":
+            assert torch.__version__.startswith("2.8.0"), torch.__version__
         print(json.dumps({"mineru": version("mineru"), "torch": torch.__version__, "python": sys.version.split()[0]}))
         return
     config = Path(os.environ["MINERU_TOOLS_CONFIG_JSON"])

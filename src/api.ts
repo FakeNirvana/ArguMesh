@@ -154,6 +154,10 @@ export async function getMatrixById(matrixId: string): Promise<MatrixResponse> {
   return parseResponse<MatrixResponse>(await fetch(`/api/matrices/${encodeURIComponent(matrixId)}`, { headers: authenticatedHeaders() }));
 }
 
+export async function listMatrices(): Promise<{ matrices: Array<{ id: string; projectId: string; name: string; description: string | null; createdAt: string }> }> {
+  return parseResponse(await fetch("/api/matrices", { headers: authenticatedHeaders() }));
+}
+
 export async function confirmMatrixEvidence(matrixId: string, evidenceIds: string[], paperId?: string) {
   return parseResponse<{ updatedIds: string[]; skipped: number }>(await fetch(`/api/matrices/${encodeURIComponent(matrixId)}/confirm`, {
     method: "POST", headers: authenticatedHeaders({ "content-type": "application/json" }),

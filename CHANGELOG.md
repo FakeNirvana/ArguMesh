@@ -8,6 +8,13 @@ ArguMesh（论脉）的版本历史。README 只保留指向本文件的入口�
 
 ---
 
+## Unreleased — macOS Apple Silicon desktop build
+
+- Persist local OCR text and page translations in the shared application data directory so they survive a desktop sidecar port change and remain available to the local web entry point. / 将 OCR 文本与逐页译文保存在共用应用数据目录，修复客户端换端口后译文消失，并供本地网页端读取。
+- Fixed local workspace data disappearing from the UI when the desktop sidecar restarted on a new port. The Mac app and locally started web server now use the same application data directory and shared workspace file; persisted matrices are also restored from the database.
+- 修复桌面服务换端口后 Paper Card 与矩阵等本地状态在界面中消失的问题。Mac 客户端与本机启动的网页端共用应用数据目录和工作区文件，已有矩阵也会从数据库恢复。
+- Added a local macOS arm64 DMG build using the existing Tauri desktop shell, with bundled Node, libSQL, and a hash-locked private Python/MinerU runtime. The app stores its database and parser models under `~/Library/Application Support/ArguMesh`; existing Windows packaging remains available. Desktop HTTP now binds explicitly to `127.0.0.1`, and Mac update checks select a matching DMG asset when one is published.
+- 新增 Apple Silicon Mac 本地 DMG 构建：沿用 Tauri 桌面壳，随包提供 Node、libSQL、独立 Python/MinerU；数据库与解析模型保存在 `~/Library/Application Support/ArguMesh`。保留 Windows 打包流程，桌面 HTTP 明确只监听 `127.0.0.1`；将来发布 Mac 包后，应用更新检查会选择对应 DMG。本地验证版尚未签名、公证或上传 Releases。
 ## Unreleased (2026-10-11) — Research Agent turn recovery
 
 - Stop and dispose interrupted/failed Pi sessions before retrying, restore bounded saved history, and wait for SDK retries to finish before completing a turn. Live turns are no longer marked failed after 25 seconds; duplicate submissions cannot mutate a running session. Add SSE keepalives, a five-minute timeout, terminal-event stream cleanup and page-exit cancellation. Preserve message/action history, show Chinese busy/timeout guidance, prevent late replies from reviving failed turns, and enforce one whitelist write per turn. No database migration.
