@@ -352,7 +352,7 @@ Projects and products we consulted while shaping the roadmap (summaries + links 
 | [Mimir](https://github.com/1692775560/Mimir) | DeepSeek Harness plugin: eight-view research workbench (library / experiments / writing / meetings) |
 | [Open Science Desktop](https://github.com/ai4s-research/open-science) ([中文](https://github.com/ai4s-research/open-science/blob/master/README.zh.md)) | Local-first, model-agnostic AI research desktop (Tauri + MCP + skills; open Claude Science alternative) |
 | [小绿鲸](https://www.xljsci.com/) | Commercial English literature reader: domain translation, skimming, notes, citations, report PPT |
-| [Agentero](https://github.com/poco-ai/agentero) | Agent-native local literature workbench (Vault + ACP BYOA + Zotero / PDF / wikilinks) |
+| [Agentero](https://github.com/poco-ai/Agentero) | Priority competitor: local literature and agent workbench (discovery / PDF / wikilinks / Zotero / TeX compilation; [2026-10-14 analysis: 10 modules, 40 capabilities](./docs/AGENTERO-RESEARCH-2026-10-14.md), source/docs review without runtime acceptance testing) |
 
 ArguMesh focuses on a **local SQLite, evidence-first object model**; these lean more agent / skill / reading-product / auto-experiment — complementary, not replacements.
 

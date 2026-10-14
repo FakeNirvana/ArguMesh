@@ -365,7 +365,7 @@ API 测试直连 Hono 应用并为每个测试文件创建独立的临时 SQLite
 | [Mimir](https://github.com/1692775560/Mimir) | DeepSeek Harness 插件：文献 / 实验 / 写作 / 组会八视图工作台 |
 | [Open Science Desktop](https://github.com/ai4s-research/open-science)（[中文](https://github.com/ai4s-research/open-science/blob/master/README.zh.md)） | 本地优先、模型无关的 AI 科研桌面工作台（Tauri + MCP + skills） |
 | [小绿鲸](https://www.xljsci.com/) | 商业英文文献阅读器：学科翻译、速读、笔记、引用与汇报 PPT |
-| [Agentero](https://github.com/poco-ai/agentero) | Agent 原生本地文献工作台（Vault + ACP BYOA + Zotero / PDF / 双链） |
+| [Agentero](https://github.com/poco-ai/Agentero) | 重点竞品：本地文献与 Agent 工作台（发现 / PDF / 双链 / Zotero / TeX 编译；[2026-10-14 分析：10 模块、40 项能力](./docs/AGENTERO-RESEARCH-2026-10-14.md)，源码/文档盘点，未运行验收） |
 
 ArguMesh 侧重**本地 SQLite + 证据优先的结构化对象**；上述多偏 agent / skill / 阅读产品 / 自动实验，可互为补充而非替代。
 

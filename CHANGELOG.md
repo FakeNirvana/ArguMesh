@@ -8,6 +8,11 @@ ArguMesh（论脉）的版本历史。README 只保留指向本文件的入口�
 
 ---
 
+## Docs (2026-10-14) — Agentero competitor analysis
+
+- Expanded the existing Agentero reference into a priority-competitor analysis with 10 modules and 40 numbered capabilities, pinned source links, release/source distinctions, platform limits, and an ArguMesh comparison. Updated the official site and corrected the former BibTeX-only writing description to include current-main TeX editing/compilation; synchronized all three READMEs. Source/docs review only, without Agentero runtime testing; no application or database migration changes.
+- 将已有 Agentero 简介扩展为重点竞品分析：10 个模块、40 项编号能力，固定源码来源，区分正式版本与主干、注明平台限制并对照 ArguMesh。更新官网链接，修正旧“仅 BibTeX 导出”描述，补充主干 TeX 编辑/编译，同步三份 README。本次为源码/文档盘点，未运行验收 Agentero；无应用功能或数据库迁移变更。
+
 ## v3.3.2 (2026-10-12) — Windows and Apple Silicon Mac installers
 
 - Set the package, Tauri bundle, and Cargo version to 3.3.2. Published the rebuilt Windows x64 EXE and the updated Apple Silicon Mac DMG with SHA-256 checksums. Both the Mac app metadata and bundled server report 3.3.2; archive integrity and its empty database template passed inspection. No new database schema migration.

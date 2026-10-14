@@ -2,6 +2,7 @@
 
 > 记录 ArguMesh 产品/架构设计时可对照的开源与商业产品。  
 > 首次整理：**2026-08-27** · 增补：**2026-09-13**（Open Science Desktop / 小绿鲸 / Agentero）
+> Agentero 专项复核：**2026-10-14**（10 个模块、40 项能力；固定源码快照，未运行验收）
 
 | 项目 | 链接 | 一句话 |
 | --- | --- | --- |
@@ -11,7 +12,7 @@
 | **Mimir** | [1692775560/Mimir](https://github.com/1692775560/Mimir) | DeepSeek Harness 插件：八视图研究工作台（文献·实验·写作·组会） |
 | **Open Science Desktop** | [ai4s-research/open-science](https://github.com/ai4s-research/open-science) · [中文 README](https://github.com/ai4s-research/open-science/blob/master/README.zh.md) · [官网](https://openedscience.com/) | 本地优先、模型无关的 AI 科研桌面工作台（Tauri + MCP + skills；Claude Science 开源替代） |
 | **小绿鲸** | [xljsci.com](https://www.xljsci.com/) | 商业英文文献阅读器：学科翻译、速读、笔记、引用与汇报 PPT（云端多端） |
-| **Agentero** | [poco-ai/agentero](https://github.com/poco-ai/agentero) · [官网](https://agentero.poco-ai.com) | Agent 原生本地文献工作台：Vault + ACP BYOA + Zotero/PDF/双链笔记 |
+| **Agentero** | [poco-ai/Agentero](https://github.com/poco-ai/Agentero) · [官网](https://agentero.app) · [详细分析](AGENTERO-RESEARCH-2026-10-14.md) | 重点竞品：本地文献与 Agent 工作台，10 个模块 / 40 项能力（含发现、阅读、双链、TeX 编译与生态互通） |
 
 ---
 
@@ -92,28 +93,34 @@
 
 ---
 
-## 7. Agentero（poco-ai/agentero）
+## 7. Agentero（poco-ai/Agentero）
 
-- **定位**：Agent 时代的 **本地优先** 文献工作台；强调 Agent 友好 / Agent 原生的文献管理（Context is everything）。[GitHub](https://github.com/poco-ai/agentero) · [agentero.poco-ai.com](https://agentero.poco-ai.com)。
-- **核心机制**：Tauri 2 + React；本地 **Vault** 为事实来源；通过 **ACP** 接入本机 Agent（BYOA，不锁定模型）；兼容 Zotero 导入/导出；内置 CLI 与 MCP。
-- **典型能力**：Cool Papers / 魔搭 / RSS / 推荐导入；PDF 分屏阅读 + 划词对话 / 翻译 / 高亮；Markdown 双链笔记；Skill 安装；S3 兼容同步与 SSH 远程 Vault。
+- **定位**：为人与 Agent 协作设计的**本地优先科研工作台**，列为阅读/文献/Agent 方向的重点竞品。[GitHub](https://github.com/poco-ai/Agentero) · [agentero.app](https://agentero.app)。
+- **核验快照**：2026-10-14，最新正式发布 [v0.11.7](https://github.com/poco-ai/Agentero/releases/tag/v0.11.7)（2026-10-08）；本次盘点基于主干 [d20787f](https://github.com/poco-ai/Agentero/commit/d20787f0680084c758c290e923b790f6110865b3)，非安装包实测。
+- **核心机制**：Tauri 2 + React 19；Vault 普通文件保存正文/笔记/批注，SQLite Catalog 管理论文元数据，并投影 metadata sidecar；ACP 接入本地 Agent（BYOA），提供 MCP 与无头 CLI。本地运行不意味着模型调用和所有解析都离线。
+- **功能数量**：官方 README 分 4 大方向；本次按独立用户能力归为 **10 模块、40 项**，不重复计算 UI/CLI/MCP 同一能力，不计主题、快捷键、占位和未核验的移动端分发。完整编号、来源、限制与对照见 **[Agentero 专项分析](AGENTERO-RESEARCH-2026-10-14.md)**。
+- **典型能力**：Zotero 迁移/Connector；Cool Papers / 魔搭 / RSS / arXiv 推荐与查询式发现；CCF 截稿；PDF 文字/视觉批注、Figures、引用近邻图、翻译；Markdown 双链/嵌入/改链；ACP 会话、精读和 Skill；分屏/多窗口、TeX 编辑与编译；S3/WebDAV 同步、SSH 远程 Vault、CLI Doctor。
+- **边界**：Windows 暂不支持 SSH 远程 Vault；自动精读默认关且不连跑批量入库；MCP 不支持远程 Vault；关键词搜索不等于语义 RAG；iOS 远程客户端主干文档与播客占位单列观察，不计入 40 项。
 - **与 ArguMesh 的关系**：
-  - 文献库 + PDF 阅读 + Agent 协作重叠高；Agentero 以 **桌面 Vault + ACP Host** 为中心，ArguMesh 以 **Web + SQLite 证据对象（Matrix / RQ / Idea）** 为中心。
-  - 可借鉴：ACP BYOA、Vault/Catalog 本地事实源、Zotero 互通、划词对话与 Skill 市场形态。
+  - 文献库 + PDF 阅读 + Agent 协作重叠高；Agentero 强在**文献入口、开放协议与文件互通**，ArguMesh 强在**证据矩阵、人工核验、RQ、实验结果分析和写作版本**。
+  - Agentero 已有权限模式与笔记 Keep/Revert，但本次未发现同等证据格确认/锁定及 RQ/实验对象流程；不能把引用图等同证据矩阵。
+  - 优先研究 Zotero 迁移、图表位置引用、透明上下文与文献关联；ACP/MCP/CLI 互操作为可选研究方向。此次仅更新竞品文档，不实施或排期功能。
 
 ---
 
 ## 对照 ArguMesh 现状（2026-09）
 
+> 其余项目保留 2026-09 摘要；**Agentero 列于 2026-10-14 专项复核**，详细能力与限制见上节，不代表整表重新验收。
+
 | 能力 | ArguMesh | ARIS | autoresearch / pi-autoresearch | Mimir | Open Science | 小绿鲸 | Agentero |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | 本地优先 / 无账号 | ✅ SQLite | ✅ skill 文件 | ✅ 本地 git + `.auto/` | ⚠️ 依赖 dsh | ✅ 本地文件夹 | ❌ 云端账号 | ✅ Vault + SQLite catalog |
 | 文献库 + PDF | ✅ | skill | — | ✅ Library | ✅ | ✅ 核心 | ✅ 核心 |
-| 证据矩阵 + 人工核验 | ✅ 核心 | 部分（audit skills） | — | 部分 | 部分（可审计工件） | — | — |
-| 实验「执行」 | ❌ 只导入/分析 | ✅ bridge/queue | ✅ 核心 | ✅ Servers | ✅ runs / Slurm 等 | — | — |
-| LaTeX / 写作 | ✅ workspace | ✅ paper skills | — | ✅ Paper | ✅ 报告/写作 | 引用 + PPT | BibTeX 导出 |
-| Agent 多轮 + 结构化动作 | ✅ Research Agent | ✅ 80+ skills | ✅ autoresearch loop | ✅ slash + tools | ✅ ACP + skills | AI 问答（产品内） | ✅ ACP BYOA |
-| 睡觉/无人值守 pipeline | 部分（任务中心） | ✅ 核心 | ✅ 核心 | 部分 | ✅ 自主 agent / 无头 osd | — | 部分 |
+| 证据矩阵 + 人工核验 | ✅ 核心 | 部分（audit skills） | — | 部分 | 部分（可审计工件） | — | 本次未发现同等流程 |
+| 实验「执行」 | ❌ 只导入/分析 | ✅ bridge/queue | ✅ 核心 | ✅ Servers | ✅ runs / Slurm 等 | — | 本次未发现独立实验编排流程 |
+| LaTeX / 写作 | ✅ workspace | ✅ paper skills | — | ✅ Paper | ✅ 报告/写作 | 引用 + PPT | ✅ 主干 TeX 编辑/编译 + BibTeX |
+| Agent 多轮 + 结构化动作 | ✅ Research Agent | ✅ 80+ skills | ✅ autoresearch loop | ✅ slash + tools | ✅ ACP + skills | AI 问答（产品内） | ✅ ACP + MCP（非同等领域动作约束） |
+| 睡觉/无人值守 pipeline | 部分（任务中心） | ✅ 核心 | ✅ 核心 | 部分 | ✅ 自主 agent / 无头 osd | — | 部分（单篇自动精读，非整链路） |
 
 ---
 
