@@ -106,11 +106,15 @@ Built-in PDF reader with OCR. **Select any passage and a floating bubble appears
 
 Saving a selection as a Note, Claim, or Evidence keeps the paper reference and page number attached. Ask the AI about a passage: only the text you selected, its page number, and your question are sent to the model — never the whole document.
 
-For scanned or older papers, use **OCR 本页 → 翻译本页** to translate recognized page text without waiting for precise layout parsing. English OCR worker, WASM core and language data are bundled with the application, removing runtime CDN downloads. Preparation, engine loading and recognition progress are shown, with cancellation and timeout recovery. If precise parsing fails, whole-paper translation can use existing native/OCR page text with an explicit approximate-layout notice; otherwise it asks for page OCR. Both reader tabs remain accessible during paused or failed translations. Failure notices distinguish connection, key/permission, quota/rate-limit and timeout problems.
+For scanned or older papers, use **OCR 本页 → 翻译本页** to translate recognized page text without waiting for precise layout parsing. English OCR worker, WASM core and language data are bundled with the application, removing runtime CDN downloads. Preparation, engine loading and recognition progress are shown, with cancellation and timeout recovery. If precise parsing fails, whole-paper translation can use existing native/OCR page text with an explicit approximate-layout notice; otherwise it asks for page OCR. Reader tabs remain accessible during paused or failed translations. Failure notices distinguish connection, key/permission, quota/rate-limit and timeout problems.
+
+Annotations and Q&A use readable typography and darker body text: 16px input fields and 15px excerpts/answers, wrapping action buttons and larger selection-translation bubbles across Windows, macOS and iOS browsers.
 
 ### AI Paper Card
 Generate a structured card for any paper: Problem, Method, Data, Findings, Limitations — each field with source excerpts, so every claim can be traced back to the paper.
 The generation button and progress notice show the active model, refreshing configuration before each request. Existing cards retain their original generation model as historical provenance.
+
+Choose **对照 PDF 填写** on the paper detail page, or the **Paper Card** reader tab, to edit while viewing the PDF. Wide screens show both panes side by side; narrow screens stack independently scrolling panes. Switching between notes, translation and the card preserves unsaved card drafts; click **保存 Paper Card** to persist them. Opening this view does not call AI.
 
 ### Evidence Matrix
 Papers as columns × research dimensions as rows. AI extraction fills every cell with evidence, confidence, and source location (page + excerpt). Then you verify: mark a cell 原文一致 (matches the source), 需要修订 (needs revision), or 标记冲突 (conflict), and 确认并锁定 (confirm & lock) the ones you trust. Locked cells are never silently overwritten by batch AI runs. With many papers (e.g. 50+), the matrix uses **horizontal scroll** with fixed column widths and a sticky left dimension column — use the top search box to filter papers.

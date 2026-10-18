@@ -227,3 +227,51 @@ it("视口上方的纸页变高后，两栏保留同页阅读位置", async () =
   expect(document.querySelector<HTMLInputElement>('[aria-label="当前页码"]')?.value).toBe("2");
   expect(api.translateSelection).not.toHaveBeenCalled();
 });
+
+
+it("Paper Card 对照入口保留 PDF，切换页签不丢草稿，保存仍写入当前论文", async () => {
+  const updatePaper = workspace.useWorkspace().updatePaper;
+  await render("?panel=card");
+  const original = document.querySelector(".pdf-stage");
+  expect(original?.textContent).toContain("Original PDF 1");
+  expect(document.querySelector('[role="tab"][aria-selected="true"]')?.textContent).toBe("Paper Card");
+  const problem = document.querySelector<HTMLTextAreaElement>('textarea[name="problem"]')!;
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")!.set!.call(problem, "对照原文填写的研究问题");
+    problem.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  await act(async () => button("批注与问答").click());
+  expect(document.querySelector<HTMLElement>("#reader-card-panel")?.hidden).toBe(true);
+  await act(async () => button("双语对照").click());
+  await act(async () => button("Paper Card").click());
+  expect(document.querySelector<HTMLElement>("#reader-card-panel")?.hidden).toBe(false);
+  expect(problem.value).toBe("对照原文填写的研究问题");
+  expect(document.querySelector(".pdf-stage")).toBe(original);
+  await act(async () => document.querySelector<HTMLFormElement>(".paper-card-editor")!.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })));
+  expect(updatePaper).toHaveBeenCalledWith("paper", expect.objectContaining({ card: expect.objectContaining({ problem: "对照原文填写的研究问题", confirmed: false }) }));
+  expect(api.translateSelection).not.toHaveBeenCalled();
+  expect(pdf.extractPdfText).not.toHaveBeenCalled();
+});
+
+
+it("窄 PDF 分区进入卡片模式时按分区宽度适配，而不是裁掉右半页", async () => {
+  vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockImplementation(function (this: HTMLElement) {
+    return this.classList.contains("pdf-stage") ? 320 : 0;
+  });
+  await render("?panel=card");
+  const sheet = document.querySelector<HTMLElement>(".pdf-stage .continuous-reader-page")!;
+  expect(Number.parseFloat(sheet.style.width)).toBeLessThanOrEqual(320 - 32);
+  expect(Number.parseFloat(sheet.style.width)).toBeGreaterThan(0);
+});
+
+it("对照编辑沿用已保存卡片的确认状态与 AI 来源信息", async () => {
+  const card = { problem: "已有问题", method: "已有方法", data: "", findings: "", limitations: "", confirmed: true, updatedAt: "2026-10-18T00:00:00Z", generatedBy: "original-model", generatedAt: "2026-10-17T00:00:00Z", generatedSource: "PDF 第 2 页", sources: { problem: "原文证据摘录", method: "", data: "", findings: "", limitations: "" } };
+  const state = workspace.useWorkspace();
+  vi.mocked(workspace.useWorkspace).mockReturnValue({ ...state, papers: [{ ...state.papers[0], card }] });
+  await render("?panel=card");
+  expect(document.querySelector<HTMLTextAreaElement>('textarea[name="problem"]')?.value).toBe("已有问题");
+  expect(document.querySelector<HTMLInputElement>('input[name="confirmed"]')?.checked).toBe(true);
+  expect(document.querySelector(".ai-evidence-panel")?.textContent).toContain("原文证据摘录");
+  await act(async () => document.querySelector<HTMLFormElement>(".paper-card-editor")!.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })));
+  expect(state.updatePaper).toHaveBeenCalledWith("paper", expect.objectContaining({ card: expect.objectContaining({ ...card, updatedAt: expect.any(String) }) }));
+});

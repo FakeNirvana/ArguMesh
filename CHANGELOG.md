@@ -8,6 +8,13 @@ ArguMesh（论脉）的版本历史。README 只保留指向本文件的入口�
 
 ---
 
+## Unreleased (2026-10-18) — Reader readability and Paper Card comparison (#2)
+
+- Increased annotation/Q&A input text to 16px and excerpt/answer body text to 15px, strengthened text contrast and enlarged actions and selection-translation bubbles across platforms. Buttons wrap on narrow screens.
+- Added a Paper Card reader tab and a direct comparison entry from paper details. Reused the existing editor alongside the PDF, with side-by-side desktop panes and independently scrolling stacked panes on narrow screens. Unsaved card drafts survive tab switches; saving uses the existing card persistence and provenance flow. Opening the view does not trigger AI. No database migration.
+- 修复批注与问答字号过小、颜色偏淡：输入文字 16px、摘录与回答正文 15px，增加文字对比度，放大操作按钮与划词翻译气泡；窄屏按钮可换行，对 Windows、macOS 与 iOS 共用界面生效。
+- 阅读器新增 Paper Card 页签，文献详情新增「对照 PDF 填写」入口；复用现有编辑器与 PDF 阅读器，宽屏左右并排，窄屏上下独立滚动。切换页签保留未保存卡片草稿，保存沿用原有卡片持久化与来源记录；仅打开界面不调用 AI。无需数据库迁移。
+
 ## Docs (2026-10-14) — Agentero competitor analysis
 
 - Expanded the existing Agentero reference into a priority-competitor analysis with 10 modules and 40 numbered capabilities, pinned source links, release/source distinctions, platform limits, and an ArguMesh comparison. Updated the official site and corrected the former BibTeX-only writing description to include current-main TeX editing/compilation; synchronized all three READMEs. Source/docs review only, without Agentero runtime testing; no application or database migration changes.

@@ -10,6 +10,7 @@ import { ContinuousPage, ContinuousPdfPage } from "../components/ContinuousPage"
 import { ContinuousTranslationPage } from "../components/TranslationSheet";
 import { pageScrollTop, readPageScroll, type PageScrollPosition } from "../pdf/scroll";
 import { compareCacheLanguage, readTranslationPage, targetLanguageFor, validCachedTranslation } from "../pdf/translationPage";
+import { PaperCardEditor } from "../components/PaperCardEditor";
 import { EmptyState, LoadingState } from "../components/states";
 import { pickBubbleAnchor, type PageRect } from "../pdf/selection";
 import { getPageTranslations, getPaperPageTexts, getPaperPdf, savePageTranslations, savePaperPdf } from "../storage/paperFiles";
@@ -101,7 +102,7 @@ export function ReaderPage() {
   const [editingExcerptId, setEditingExcerptId] = useState("");
   const [error, setError] = useState("");
   // 进入阅读器即展示原文 PDF 与同页译文，批注问答仍可从右栏切回。
-  const [readerTab, setReaderTab] = useState<"notes" | "compare">("compare");
+  const [readerTab, setReaderTab] = useState<"notes" | "compare" | "card">(searchParams.get("panel") === "card" ? "card" : "compare");
   const [compareLoading, setCompareLoading] = useState(false);
   const [compareSource, setCompareSource] = useState<"native" | "ocr" | "empty">("empty");
   const [compareLanguage, setCompareLanguage] = useState<"中文" | "English">("中文");
@@ -295,19 +296,19 @@ export function ReaderPage() {
   }, [document]);
 
   useEffect(() => {
-    if (readerTab !== "compare" || !document) return;
+    if (readerTab === "notes" || !document) return;
     const original = stageRef.current;
-    const translated = compareStageRef.current;
-    if (!original || !translated) return;
+    const translated = readerTab === "compare" ? compareStageRef.current : null;
+    if (!original || (readerTab === "compare" && !translated)) return;
     const fit = () => {
       const width = pageSize.width;
-      const available = Math.min(original.clientWidth, translated.clientWidth) - 36;
-      if (available > 0) resizePages(Math.max(.7, Math.min(2.2, available / width)));
+      const available = translated ? Math.min(original.clientWidth, translated.clientWidth) - 36 : original.clientWidth - 32;
+      if (available > 0) resizePages(Math.max(readerTab === "card" ? .3 : .7, Math.min(2.2, available / width)));
     };
     fit();
     const observer = new ResizeObserver(fit);
     observer.observe(original);
-    observer.observe(translated);
+    if (translated) observer.observe(translated);
     return () => observer.disconnect();
   }, [document, pageSize.width, readerTab]);
 
@@ -838,6 +839,7 @@ export function ReaderPage() {
         <div className="reader-tabs" role="tablist" aria-label="右栏视图">
           <button id="reader-notes-tab" type="button" role="tab" className="reader-tab" aria-controls="reader-notes-panel" aria-selected={readerTab === "notes"} onClick={() => setReaderTab("notes")}><NotePencil />批注与问答</button>
           <button id="reader-compare-tab" type="button" role="tab" className="reader-tab" aria-controls="reader-compare-panel" aria-selected={readerTab === "compare"} onClick={() => setReaderTab("compare")}><Translate />双语对照</button>
+          <button id="reader-card-tab" type="button" role="tab" className="reader-tab" aria-controls="reader-card-panel" aria-selected={readerTab === "card"} onClick={() => setReaderTab("card")}><BookOpenText />Paper Card</button>
         </div>
         {/* 用 CSS 隐藏而不是卸载:切走再切回时,写了一半的问题和摘录备注不该丢。 */}
         <div id="reader-notes-panel" role="tabpanel" aria-labelledby="reader-notes-tab" className="reader-notes" data-active={readerTab === "notes"}>
@@ -846,6 +848,9 @@ export function ReaderPage() {
         {error && document ? <div className="reader-error"><WarningCircle />{error}</div> : null}
         {answer ? <article className="answer-card"><header><span><Check /> AI 回答</span><small>{model} · 第 {pageNumber} 页</small></header><p>{answer}</p>{selection.trim() ? <blockquote>{selection}</blockquote> : null}</article> : null}
         <section className="reader-history"><div className="section-heading"><div><span className="eyebrow">摘录与问答</span><h2>{excerpts.length} 条摘录 · {history.length} 次问答</h2></div></div>{excerpts.map((item) => <article className={`excerpt-card kind-${item.kind}`} key={item.id}><header><button onClick={() => jumpToPage(item.page)}>{item.kind === "evidence" || item.kind === "highlight" ? <BookmarkSimple /> : <NotePencil />}第 {item.page} 页</button><span><button className="icon-button subtle" onClick={() => setEditingExcerptId(item.id)} aria-label="编辑摘录"><NotePencil /></button><button className="icon-button subtle danger" onClick={() => deleteReaderExcerpt(item.id)} aria-label="删除摘录"><Trash /></button></span></header>{editingExcerptId === item.id ? <input defaultValue={item.note} autoFocus onBlur={(event) => { updateReaderExcerpt(item.id, { note: event.target.value, color: item.color }); setEditingExcerptId(""); }} onKeyDown={(event) => { if (event.key === "Enter") event.currentTarget.blur(); }} /> : <strong>{item.note || (item.kind === "evidence" ? "证据摘录" : item.kind === "highlight" ? "文本高亮" : "阅读笔记")}</strong>}<p>{item.text}</p></article>)}{history.map((item) => <article key={item.id}><button onClick={() => { jumpToPage(item.page); setSelection(item.selection); setSelectionPage(item.page); setSelectionRects([]); }}><Quotes />第 {item.page} 页</button><strong>{item.question}</strong><p>{item.answer}</p><footer><span>{item.model}</span><time>{new Date(item.createdAt).toLocaleString("zh-CN")}</time></footer></article>)}</section>
+        </div>
+        <div id="reader-card-panel" role="tabpanel" aria-labelledby="reader-card-tab" className="reader-card-panel" hidden={readerTab !== "card"}>
+          <PaperCardEditor key={paperId} />
         </div>
         {readerTab === "compare" ? <section id="reader-compare-panel" role="tabpanel" aria-labelledby="reader-compare-tab" className="compare-pane" aria-label="双语对照">
           <div className="compare-toolbar">
