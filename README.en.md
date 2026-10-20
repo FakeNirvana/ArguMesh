@@ -187,6 +187,8 @@ Troubleshooting entry point: `%LOCALAPPDATA%\ArguMesh\sidecar.log` — it record
 
 On an **Apple Silicon Mac**, you can build a local `.dmg` from source using [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) §3. This is a local validation build and is not yet on GitHub Releases. The Mac bundle includes private Node, Python and MinerU runtimes; the parsing models download on first precise translation. The Mac app and locally started web server share the database, workspace file and reading cache (OCR text and translations) under `~/Library/Application Support/ArguMesh`, including across desktop restarts on a new port. The Mac build has no Apple Developer signature or notarization, so you must approve its first launch in macOS.
 
+The DMG contains one `ArguMesh.app`. Drag it to Applications and replace the old version. Apps named `previous`, `pre-cache`, or `before` are old backup copies and can be moved to Trash; research data lives in the Application Support directory above, outside the app bundle.
+
 On other platforms, run it from source — see [Deployment](#deployment) below (`pnpm install` → `pnpm run db:seed` → `pnpm run dev`), or paste the [Deploy with AI](#deploy-with-ai) prompt into a coding agent.
 
 The desktop and web builds share the core research workflows. The Tauri desktop host also provides a local sidecar, an installer and update reminders. To build it yourself, follow the recipe in [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) §3.

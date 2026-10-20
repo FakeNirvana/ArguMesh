@@ -169,7 +169,7 @@ for (const file of parserFiles) {
   if (!(await exists(path.join(parserDir, file)))) throw new Error("[sidecar] Missing portable MinerU runtime; run pnpm run build:mineru first");
 }
 const parserPython = path.join(parserDir, process.platform === "darwin" ? "bin/python3.13" : "python.exe");
-const parserCheck = spawnSync(parserPython, ["-I", path.join(parserDir, "runner.py"), "check"], { stdio: "inherit", windowsHide: true });
+const parserCheck = spawnSync(parserPython, ["-I", "-B", path.join(parserDir, "runner.py"), "check"], { stdio: "inherit", windowsHide: true });
 if (parserCheck.status !== 0) throw new Error("[sidecar] Portable MinerU validation failed");
 if (path.dirname(outDir) !== path.join(root, "build")) throw new Error("Unsafe sidecar build path");
 

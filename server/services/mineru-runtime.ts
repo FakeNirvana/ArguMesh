@@ -98,12 +98,12 @@ export async function runMineruCommand(args: string[], signal: AbortSignal, prog
   const identity = `${runtime}\n${models}`;
   if (preparedRuntime !== identity) {
     progress({ stage: "starting", completed: 0, total: 7 });
-    await run(python, ["-I", runner, "prepare"], env, signal, 1_800_000, true, progress);
+    await run(python, ["-I", "-B", runner, "prepare"], env, signal, 1_800_000, true, progress);
     preparedRuntime = identity;
   }
   progress({ stage: "parsing", completed: 7, total: 7 });
   try {
-    await run(python, ["-I", runner, "parse", ...args], { ...env, MINERU_MODEL_SOURCE: "local" }, signal, 600_000, false, progress);
+    await run(python, ["-I", "-B", runner, "parse", ...args], { ...env, MINERU_MODEL_SOURCE: "local" }, signal, 600_000, false, progress);
   } catch (error) {
     preparedRuntime = "";
     throw error;

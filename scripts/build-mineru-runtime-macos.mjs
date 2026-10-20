@@ -39,7 +39,7 @@ if (existing?.fingerprint !== fingerprint) {
 
 await cp(path.join(root, "scripts", "mineru", "runner.py"), path.join(target, "runner.py"));
 await cp(lock, path.join(target, "requirements.lock"));
-await run(path.join(target, "bin", "python3.13"), ["-I", path.join(target, "runner.py"), "check"]);
+await run(path.join(target, "bin", "python3.13"), ["-I", "-B", path.join(target, "runner.py"), "check"]);
 await writeFile(path.join(target, "runtime.json"), JSON.stringify({
   python: pythonVersion, mineru: "3.4.2", torch: "2.8.0", fingerprint,
 }, null, 2));

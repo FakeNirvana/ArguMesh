@@ -10,6 +10,9 @@ ArguMesh（论脉）的版本历史。README 只保留指向本文件的入口�
 
 ## Unreleased — macOS Apple Silicon desktop build
 
+- Prevent the bundled Python parser from rewriting bytecode inside the installed app: all isolated parser checks and runs now use `-B`. This keeps the macOS bundle's sealed resources intact after use. No data migration.
+- 修复内置 Python 解析器运行后改写应用包内字节码的问题：构建检查和解析过程均使用 `-B`，避免 Mac 应用资源签名在使用后失效。无需迁移数据。
+
 - Persist local OCR text and page translations in the shared application data directory so they survive a desktop sidecar port change and remain available to the local web entry point. / 将 OCR 文本与逐页译文保存在共用应用数据目录，修复客户端换端口后译文消失，并供本地网页端读取。
 - Fixed local workspace data disappearing from the UI when the desktop sidecar restarted on a new port. The Mac app and locally started web server now use the same application data directory and shared workspace file; persisted matrices are also restored from the database.
 - 修复桌面服务换端口后 Paper Card 与矩阵等本地状态在界面中消失的问题。Mac 客户端与本机启动的网页端共用应用数据目录和工作区文件，已有矩阵也会从数据库恢复。

@@ -142,6 +142,8 @@ Tauri 自动合并 `src-tauri/tauri.macos.conf.json`，目标为 DMG。产物在
 
 Mac 首次启动在 `~/Library/Application Support/ArguMesh/data/argumesh.db` 写入空库；已有库不会覆盖。`sidecar.log` 在同一 `ArguMesh` 目录。精确解析首次使用下载模型到用户数据目录；翻译仍调用用户设置的模型 API。数据库、PDF、模型与 API Key 均不随安装包分发。验证时先检查项目读写、PDF 阅读和 AI 配置，再按需检查精确解析的模型下载与翻译。
 
+内置 Python 以 `-I -B` 运行：`-I` 隔离用户 Python 环境，`-B` 禁止运行时改写包内 `.pyc`，否则 macOS 应用运行后可能无法通过 `codesign --verify --deep --strict`。构建后先验证 DMG 中只有一份 `ArguMesh.app`，再从“应用程序”启动并复查签名；版本备份不要放在 `/Applications` 内。
+
 内置 CPU 解析环境后安装包与安装占用会明显增大；模型不进入安装包，首次使用另行下载。`src-tauri/target/` 全量构建约 2 GB（已 gitignore，别提交）。安装模式 `currentUser`，**不需要管理员权限**；安装器语言 English + SimpChinese。
 
 ### 3.3 `--node-exe` 为什么必需

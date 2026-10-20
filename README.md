@@ -184,6 +184,8 @@ API:`POST /api/projects/:projectId/library/scan-inbox`(需已设置 `workspacePa
 
 **Apple Silicon Mac** 可从源码构建本机 `.dmg`（当前为本地验证产物，尚未上传 GitHub Releases），步骤见 [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) 第 3 节。Mac 包内含独立 Node、Python 与 MinerU；首次精确解析仍需下载模型。Mac 客户端与本机启动的网页端共用 `~/Library/Application Support/ArguMesh` 下的数据库、工作区文件及阅读缓存（OCR 文本与译文）；重启换端口后仍可继续阅读。Mac 包尚未进行 Apple 开发者签名或公证，安装后的首次启动需由用户在 macOS 中手动确认。
 
+DMG 中只有一份 `ArguMesh.app`；安装时将它拖入“应用程序”并覆盖旧版。名称带 `previous`、`pre-cache` 或 `before` 的 `.app` 是旧版备份，可移入废纸篓；用户数据保存在上述 Application Support 目录，不在应用包内。
+
 其他平台可从源码跑——见下方[部署](#部署)(`pnpm install` → `pnpm run db:seed` → `pnpm run dev`),或把[让 AI 部署](#让-ai-部署)的提示词发给编程助手。
 
 桌面版与 Web 版共享核心研究功能；桌面版通过 Tauri 宿主提供本地 sidecar、安装包和应用更新提醒。想自己构建,见 [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) 第 3 节。
