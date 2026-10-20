@@ -47,6 +47,6 @@ for (const file of await readdir(torchLib, { withFileTypes: true })) {
 await bundleVcRuntime(root, target, run);
 await cp(path.join(root, "scripts", "mineru", "runner.py"), path.join(target, "runner.py"));
 await cp(lock, path.join(target, "requirements.lock"));
-await run(path.join(target, "python.exe"), ["-I", path.join(target, "runner.py"), "check"]);
+await run(path.join(target, "python.exe"), ["-I", "-B", path.join(target, "runner.py"), "check"]);
 await writeFile(path.join(target, "runtime.json"), JSON.stringify({ python: version, mineru: "3.4.2", torch: "2.8.0+cpu", fingerprint }, null, 2));
 console.log("[mineru-runtime] Ready: build/mineru-runtime (no model weights, no user configuration)");
