@@ -58,6 +58,34 @@ server/
 - **AI 管线** — `ai.ts`（provider 注册表 + `resolveAiForRequest`、`LOCAL_AI_ACCOUNT_ID`）、`stepfun.ts`（单 provider 客户端 + `stripThinkBlock` + `inferAiApiFormat`）、`pi-agent.ts`（Pi `AgentSession` 轮次执行器：SSE 事件、工具白名单、`citationsFromActions`、`normalizeAgentTransportError`）、`pi-runtime.ts`（把 app AI 配置桥接到 Pi model 接口）、`research-agent.ts`（白名单领域动作执行器）、`project-context.ts`（有界上下文装配 + `PROJECT_CONTEXT_LIMITS`）、`result-analysis.ts`、`web-search.ts`（SearXNG JSON 客户端）
 - **领域** — `latex.ts`（引擎探测/编译/取消/状态/PDF 路径/日志解析）、`paper-files.ts`（LaTeX 工作区读写、快照、大纲解析、缺失引用检测）、`literature-inbox.ts`（`{workspacePath}/literature/` 扫描，50 文件 / 25 MB 上限）、`native-picker.ts`（拉起系统目录选择对话框/路径打开——**全应用唯一的子进程代码**）
 
+### Research Agent 与 skills
+
+**现状核验：2026-10-21，Pi SDK `@earendil-works/pi-coding-agent` 0.84.3。** 已有技能发现、加载和手动展开的底座，但尚未形成完整的 skills 产品功能；本节只记录实现，不代表新增能力或排期。升级 SDK 后需重新核验其默认行为。
+
+`server/routes/conversations.ts` 将用户消息交给 `server/services/pi-agent.ts` 的 `runPiAgentTurn()`。后者通过 `DefaultResourceLoader.reload()` 加载资源，再把同一 loader 传给 `createAgentSession()`；没有显式设置 `noSkills` / `noExtensions`，因此沿用 SDK 的默认资源发现行为。
+
+资源路径由**服务进程的启动目录** `process.cwd()` 决定，未切换到项目的 `projects.workspace_path`。`server/services/pi-runtime.ts` 的 `createPiModelBridge()` 将 `agentDir` 设置为 `tmpdir()/argumesh-pi-agent`；它不是项目工作区，也不是持久的技能配置目录。当前 SDK 默认可发现以下技能来源：
+
+| 来源 | 发现位置 |
+| --- | --- |
+| Pi 项目技能 | `{process.cwd()}/.pi/skills/` |
+| 项目及祖先目录的共享技能 | 从 `process.cwd()` 向上查找 `.agents/skills/`；找到 Git 仓库时止于仓库根，否则止于文件系统根 |
+| 用户共享技能 | `~/.agents/skills/`，独立于应用传入的临时 `agentDir` |
+| Pi 用户技能 | `{agentDir}/skills/`；ArguMesh 当前对应临时目录下的 `argumesh-pi-agent/skills/` |
+
+项目来源受 SDK 的 `projectTrusted` 设置控制；当前应用使用的 `SettingsManager.inMemory()` 默认信任项目。仓库没有随源码提供 `.pi/skills/` 或 `.agents/skills/`，也没有 skills 管理 API 或界面；本机已有的用户共享技能仍可能被默认发现。
+
+技能的两种调用路径目前不同：
+
+- **模型自动选择未接通。** 应用自定义了系统提示，且工具白名单没有 `read`。SDK 在这种情况下不会把已加载技能的目录附加到系统提示；Agent 也没有读取技能正文及其相对引用文件的通用工具。
+- **手动 `/skill:name 参数` 有 SDK 基础。** 消息进入 `session.prompt()` 后，SDK 会查找已加载的同名技能，直接读取 `SKILL.md` 并把正文与参数展开到本轮输入。这一步不依赖 `read` 工具；技能不存在时，原文继续作为普通消息。应用尚无技能选择器或针对该语法的产品提示。
+
+应用显式启用的是 `pi-agent.ts` 中 `TOOL_NAMES` 列出的 **11 个领域工具**：项目上下文、网页搜索及九个受控领域动作。该白名单未提供通用 shell、任意文件读写或代码执行工具，不能据此宣称第三方技能的脚本和配套工具都可运行。技能正文也不会自动赋予工具权限；领域动作由 `runDomainAction()` 转交 `executeWhitelistedAgentAction()`，每轮最多执行一个，并记入 `ai_actions`。资源发现沿用 SDK 默认行为，不能把领域工具白名单等同于资源加载沙箱。
+
+尚缺技能的导入/启停/选择与来源管理、限定技能目录的资源读取、脚本执行边界，以及技能内容版本/快照与每轮调用关联的追踪。现有对话和动作记录不等于技能版本追踪；这些均是现状缺口，不在本节新增待办。
+
+**维护定位**：应用侧查看 `server/services/pi-agent.ts` 的 `getOrCreateSession()` / `TOOL_NAMES`、`server/services/pi-runtime.ts` 的 `createPiModelBridge()` 与 `server/routes/conversations.ts`。SDK 侧在已安装的 `@earendil-works/pi-coding-agent` 包中查看 `dist/core/resource-loader.js`（加载）、`package-manager.js`（默认目录与信任边界）、`skills.js`（`SKILL.md` 解析）、`system-prompt.js`（`read` 条件）及 `agent-session.js` 的 `_expandSkillCommand()`（手动展开）；不依赖机器绝对路径或易漂移的行号。
+
 ### `server/ai/`——无 DB 依赖的能力层
 
 路由复用这一层，不要在各路由里手拼 prompt：

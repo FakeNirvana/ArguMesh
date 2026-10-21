@@ -10,6 +10,7 @@ ArguMesh 的当前进度、明确**不要开工**的项、已知欠账，以及 
 
 - **当前版本**：`3.3.2`（`package.json`）；Windows x64 EXE 与 Apple Silicon Mac DMG 已发布，附 SHA-256 校验文件。当前正式安装包为 [`v3.3.2`](https://github.com/Fyuan0206/ArguMesh/releases/tag/v3.3.2)；Mac 内部版本与归档核验通过，本次未实机启动。共享工作区的并发覆盖、浏览器旧状态合并及源码旧库迁移限制见 README 与 CHANGELOG。
 - **已发布能力**：项目工作区、文献库（含 `literature/` 文件夹同步）、PDF 阅读器（OCR / 划词气泡 / 页内高亮 / 双语对照）、AI Paper Card、证据矩阵、研究脉络（洞见 + 研究问题）、实验工作台、LaTeX 写作、常驻 Research Agent（Pi `AgentSession`）、全局搜索、任务中心。
+- **Skills 基础（2026-10-21 源码核验）**：现有 Pi SDK 与默认资源加载器支持 `SKILL.md` 发现、用户级 `.agents/skills` 扫描和 `/skill:名称 参数` 手动指令展开。模型侧技能列表、按需读取、技能管理与版本追踪尚未完整接入，也没有通用脚本执行能力。加载根目录取服务启动目录而非项目 `workspacePath`。详见[开发指南](docs/DEVELOPMENT.md#research-agent-与-skills-接入现状)与[架构文档](docs/ARCHITECTURE.md)。此项记录现状，未新增功能或排期。
 - **阶段计划**：`ARGUMESH-RESEARCH-WORKBENCH-PLAN.md` 的第 0 节记录了 2026-08-26 的实施状态，其中列出的导航收敛、研究脉络、实验工作台、Research Agent、LaTeX 写作均已完成。
 - **分发**：`v3.2.5` 已发布到 [GitHub Releases](https://github.com/Fyuan0206/ArguMesh/releases/tag/v3.2.5)，附带 Windows NSIS 安装包 `ArguMesh_3.2.5_x64-setup.exe`（2026-09-24，用户重新提出后手动发布）。安装包**未签名**、**不带数据库和 AI 配置**，这三条事实同时写在 release notes、`README` / `README.zh-CN.md` 的「下载安装」章节与 `CHANGELOG.md` 里。后续版本的发布是手工三步：提交 → 打 tag → `gh release create` 附带新构建的安装包。
 

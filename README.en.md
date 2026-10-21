@@ -74,6 +74,8 @@ The project home is a persistent **Research Agent** built on the [Pi](https://pi
 
 Interrupted turns can be retried: the old session is stopped and context is rebuilt from saved messages, retaining failed messages and action records. Long turns have keepalives and a five-minute timeout. Duplicate submissions are blocked while running; ending a conversation or leaving the page cancels its request. Busy and timeout errors use Chinese guidance, and each turn allows at most one whitelisted write action.
 
+**Skills integration status (source checked on 2026-10-21)** — The Pi SDK can discover `SKILL.md` files and expand a discovered skill's instructions through `/skill:name arguments`; its default loader also scans the user's `.agents/skills` directory. ArguMesh has no skill import, selection, enable/disable or version-tracking UI. With no `read` tool enabled, the SDK omits the skill catalog from the model's prompt, leaving automatic selection and on-demand loading incomplete. The explicitly enabled domain tools do not include general Python/Shell execution or arbitrary file access. See the [development guide](docs/DEVELOPMENT.md#research-agent-与-skills-接入现状). This documents existing behavior only.
+
 ### Literature library
 Import papers by DOI / arXiv ID / URL with automatic metadata, or batch-upload PDFs (≤ 25 MB each). Track reading status (待读 → 粗读 → 精读 → 已复现 → 核心文献), favorites, tags, and per-project notes. Select multiple papers in the list to **batch-delete** them (same permanent delete as the per-row action: removes PDF, evidence, and linked knowledge across projects after confirm).
 

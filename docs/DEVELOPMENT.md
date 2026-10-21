@@ -80,6 +80,15 @@ pnpm tauri build
 
 **gitignore**：`data/`、`backups/`、`dist/`、`build/`、`src-tauri/target/`、`src-tauri/gen/`、`node_modules/`、`design-qa-artifacts/`、`docs/tasks/` 以及根目录的 `IMPACT_ANALYSIS*.md` / `TASK_SUMMARY*.md`（后两者是本机 agent 草稿，全新 clone 里没有）。
 
+## Research Agent 与 Skills 接入现状
+
+Research Agent 已使用 Pi `AgentSession` 与 `DefaultResourceLoader`；skills 的加载目录、自动选择限制与 `/skill:name 参数` 手动展开路径见 [`ARCHITECTURE.md` 的「Research Agent 与 skills」](ARCHITECTURE.md#research-agent-与-skills)。这记录的是现有底座，不表示已经提供 skills 安装、管理或通用脚本运行功能，也不新增实施排期。
+
+- 调试发现路径时，先检查**服务启动目录** `process.cwd()`，不要把项目 `workspacePath` 当作 Agent 的 cwd。默认发现涉及该目录的 `.pi/skills/`、项目及祖先目录的 `.agents/skills/`、用户 `~/.agents/skills/` 和临时 `{agentDir}/skills/`；祖先范围与信任条件详见架构文档。不要将本机全局技能自动出现误认为仓库已内置它们。
+- 当前 `TOOL_NAMES` 只显式启用 11 个领域工具，没有 `read`、通用 shell 或任意文件执行。无 `read` 时 SDK 不向自定义系统提示附加技能目录；手动命令可展开已加载的技能正文，但不会让技能获得缺失的工具或脚本权限。
+- 核对加载和展开行为可使用临时技能与无模型检查：确认发现结果、对比有/无 `read` 时的系统提示、检查手动命令展开。隔离验证应显式关闭 extensions，并注意用户 `~/.agents/skills/` 仍是独立的默认发现来源；不要执行未知扩展或技能脚本来证明「已加载」。
+- 修改接入前应明确受限资源读取、执行边界和技能版本追踪；现有 `ai_actions` 是领域动作审计，不能替代技能来源/内容版本记录。相关入口是 `server/services/pi-agent.ts`、`pi-runtime.ts` 与 `server/routes/conversations.ts`，SDK 模块定位见架构文档。
+
 ## 迁移是双轨的
 
 - **`drizzle/` + journal（`drizzle/meta/_journal.json`）覆盖 0000–0007**，由 `scripts/migrate.ts` 应用（`pnpm run db:migrate`）。
@@ -98,9 +107,9 @@ pnpm tauri build
 
 ## 文档规则（强制）
 
-来自 `.cursor/rules/readme-on-feature-changes.mdc`（`alwaysApply: true`）：
+以 [`../AGENTS.md`](../AGENTS.md) 的现行规则为准：
 
-任何**用户可见**的功能变更，必须在**同一个任务内**更新 **`README.md`**（英文，主）——功能在中文 README 里有描述时，同一轮也要改 **`README.zh-CN.md`**——并在 `## Changelog` / `## 更新记录` 下加一条。版本历史现在集中在 [`../CHANGELOG.md`](../CHANGELOG.md)，README 只保留指向它的入口。
+任何**用户可见**的功能变更，必须在**同一个任务内**更新 **`README.md`**（中文，主），同一轮同步英文版 **`README.en.md`** 与中文兼容版 **`README.zh-CN.md`**，并在 [`../CHANGELOG.md`](../CHANGELOG.md) 追加条目。版本历史集中在该文件，README 只保留指向它的入口。
 
 README 编辑属于实现的一部分，不是收尾抛光。仅纯重构、以及对用户不可见的内部改动（测试、CI、开发工具）可以跳过。
 

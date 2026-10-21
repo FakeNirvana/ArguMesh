@@ -8,6 +8,11 @@ ArguMesh（论脉）的版本历史。README 只保留指向本文件的入口�
 
 ---
 
+## Docs (2026-10-21) — Research Agent skills integration status
+
+- Documented the existing Pi SDK skill discovery and manual `/skill:name` expansion, including user-level `.agents/skills` discovery, startup-directory scope and the temporary agent directory. Distinguished these SDK mechanisms from the missing model-visible catalog, controlled skill-resource loading, management and version tracking, and general script execution. Synchronized development, architecture, status and all three README documents, and aligned the development guide's README language rule with `AGENTS.md`. Documentation only; no application, dependency or database migration changes.
+- 补充 Research Agent 的 skills 接入现状：记录 Pi SDK 已有的技能发现与 `/skill:名称` 手动展开、用户级 `.agents/skills` 扫描、服务启动目录范围和临时 Agent 目录；明确模型可见技能列表、受限技能资源读取、管理与版本追踪及通用脚本执行仍未完整接入。同步开发指南、架构、进度与三份 README，按 `AGENTS.md` 修正开发指南的 README 语言规则。本次仅更新文档，无应用功能、依赖或数据库迁移变更。
+
 ## Unreleased (2026-10-18) — Reader readability and Paper Card comparison (#2)
 
 - Increased annotation/Q&A input text to 16px and excerpt/answer body text to 15px, strengthened text contrast and enlarged actions and selection-translation bubbles across platforms. Buttons wrap on narrow screens.
