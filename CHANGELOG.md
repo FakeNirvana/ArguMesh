@@ -8,6 +8,11 @@ ArguMesh（论脉）的版本历史。README 只保留指向本文件的入口�
 
 ---
 
+## Unreleased (2026-10-21) — Skill management in the sidebar
+
+- Moved **管理技能** from the Research Agent composer to the left sidebar. It opens the existing management dialog for skills shared across projects; the composer retains automatic, no-skill and specific-skill selection. No database migration or new installer release.
+- 将「管理技能」从 Research Agent 输入区移到左侧栏，点击打开现有管理弹窗，技能由所有项目共用；输入区保留自动选择、不使用技能和指定技能。本次入口调整无数据库迁移，尚未发布新安装包。
+
 ## Unreleased (2026-10-21) — Research Agent skills
 
 - Added three bundled research skills for evidence review, experiment planning and manuscript review, plus local `SKILL.md` / skill-folder preview and installation in Research Agent. Users can inspect and enable/disable skills, uninstall user-installed skills, and choose automatic selection, a specific skill or no skills for a turn. Installations stay in the local database and are shared across projects; this source change is not yet available in published installers.

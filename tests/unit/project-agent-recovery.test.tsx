@@ -74,7 +74,7 @@ it("另一页面仍在运行时忙碌响应只刷新消息，不中断其回合"
 
 const availableSkill = { id: "builtin:evidence-check", name: "evidence-check", description: "核对证据", source: "builtin", enabled: true, version: "a".repeat(64), installedAt: null, fileCount: 1, warnings: [] } as api.AgentSkillSummary;
 
-it("指定技能随消息发送，运行中禁止更改技能或打开管理", async () => {
+it("指定技能随消息发送，运行中禁止更改选择且输入区没有管理入口", async () => {
   vi.mocked(api.listAgentSkills).mockResolvedValue({ skills: [availableSkill] });
   await render();
   const selector = document.querySelector<HTMLSelectElement>('select[aria-label="本回合研究技能"]')!;
@@ -82,8 +82,8 @@ it("指定技能随消息发送，运行中禁止更改技能或打开管理", a
   await act(async () => suggest().click());
   expect(vi.mocked(api.sendAiMessage).mock.calls[0][5]).toEqual({ skillIds: [availableSkill.id] });
   expect(selector.disabled).toBe(true);
-  const manage = [...document.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.includes("管理技能"))!;
-  expect(manage.disabled).toBe(true);
+  const composer = document.querySelector(".agent-composer")!;
+  expect([...composer.querySelectorAll("button")].some((button) => button.textContent?.includes("管理技能"))).toBe(false);
 });
 
 it("重试沿用原回合的不使用技能选择，不随当前选择改变", async () => {
@@ -94,4 +94,18 @@ it("重试沿用原回合的不使用技能选择，不随当前选择改变", a
   await act(async () => { selector.value = availableSkill.id; selector.dispatchEvent(new Event("change", { bubbles: true })); });
   await act(async () => (document.querySelector(".agent-failure button") as HTMLButtonElement).click());
   expect(vi.mocked(api.sendAiMessage).mock.calls[0][5]).toEqual({ skillIds: [] });
+});
+
+it("收到技能变化事件后刷新可用选项，失效的指定选择恢复为自动", async () => {
+  const newlyInstalled = { ...availableSkill, id: "user:new-skill", name: "new-skill", source: "user" as const };
+  vi.mocked(api.listAgentSkills).mockResolvedValueOnce({ skills: [availableSkill] }).mockResolvedValueOnce({ skills: [{ ...availableSkill, enabled: false }, newlyInstalled] });
+  await render();
+  const selector = document.querySelector<HTMLSelectElement>('select[aria-label="本回合研究技能"]')!;
+  await act(async () => { selector.value = availableSkill.id; selector.dispatchEvent(new Event("change", { bubbles: true })); });
+  expect(selector.value).toBe(availableSkill.id);
+  await act(async () => window.dispatchEvent(new Event("paperidea:agent-skills-changed")));
+  expect(api.listAgentSkills).toHaveBeenCalledTimes(2);
+  expect([...selector.options].map((option) => option.value)).toContain(newlyInstalled.id);
+  expect([...selector.options].map((option) => option.value)).not.toContain(availableSkill.id);
+  expect(selector.value).toBe("auto");
 });

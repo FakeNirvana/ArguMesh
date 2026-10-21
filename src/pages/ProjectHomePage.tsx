@@ -20,7 +20,7 @@ import {
   type ResearchThread,
 } from "../api";
 import { AgentMarkdown } from "../components/AgentMarkdown";
-import { AgentSkillHistoryPreview, AgentSkillsPanel } from "../components/AgentSkillsPanel";
+import { AgentSkillHistoryPreview } from "../components/AgentSkillsPanel";
 import { EmptyState } from "../components/states";
 import { useWorkspace } from "../state/workspace";
 
@@ -57,7 +57,6 @@ export function ProjectHomePage() {
   const [skillsLoading, setSkillsLoading] = useState(true);
   const [skillsError, setSkillsError] = useState("");
   const [selectedSkill, setSelectedSkill] = useState("auto");
-  const [showSkills, setShowSkills] = useState(false);
   const [historicalSkill, setHistoricalSkill] = useState<{ messageId: string; conversationId: string; usage: AgentSkillUsage } | null>(null);
   const skillsRequestRef = useRef(0);
   const endRef = useRef<HTMLDivElement>(null);
@@ -75,10 +74,15 @@ export function ProjectHomePage() {
     } finally { if (request === skillsRequestRef.current) setSkillsLoading(false); }
   }, []);
   useEffect(() => {
-    setSelectedSkill("auto"); setShowSkills(false); setHistoricalSkill(null); setSkills([]);
+    setSelectedSkill("auto"); setHistoricalSkill(null); setSkills([]);
     void refreshSkills();
     return () => { skillsRequestRef.current += 1; };
   }, [projectId, refreshSkills]);
+  useEffect(() => {
+    const refresh = () => { void refreshSkills(); };
+    window.addEventListener("paperidea:agent-skills-changed", refresh);
+    return () => window.removeEventListener("paperidea:agent-skills-changed", refresh);
+  }, [refreshSkills]);
   useEffect(() => {
     setSending(false); setStreamHint(""); setError("");
     return () => { sendingRef.current?.abort(); sendingRef.current = null; };
@@ -264,7 +268,6 @@ export function ProjectHomePage() {
         {error ? <div className="agent-composer-error" role="status">{error}</div> : null}
         <div className="agent-skill-composer-controls">
           <label><PuzzlePiece /><span className="visually-hidden">本回合研究技能</span><select aria-label="本回合研究技能" value={selectedSkill} disabled={sending || skillsLoading || active?.status === "cancelled"} onChange={(event) => setSelectedSkill(event.target.value)}><option value="auto">自动选择技能</option><option value="none">不使用技能</option>{(["builtin", "user"] as const).map((source) => <optgroup key={source} label={source === "builtin" ? "内置技能" : "已安装的技能"}>{skills.filter((skill) => skill.source === source && skill.enabled).map((skill) => <option key={skill.id} value={skill.id}>{skill.name}</option>)}</optgroup>)}</select></label>
-          <button type="button" disabled={sending} onClick={() => setShowSkills(true)}>管理技能{skillsLoading ? "…" : ` · ${skills.filter((skill) => skill.enabled).length}`}</button>
           {skillsError ? <button type="button" className="agent-skill-retry" disabled={sending || skillsLoading} onClick={() => void refreshSkills()} title={skillsError}>技能加载失败，重试</button> : null}
         </div>
         <div className="agent-composer-box"><textarea name="message" required disabled={sending || active?.status === "cancelled"} placeholder={active?.status === "cancelled" ? "该会话已结束，请新建对话" : "询问项目证据、形成研究问题、设计实验或分析真实结果…"} onKeyDown={(event) => {
@@ -292,7 +295,6 @@ export function ProjectHomePage() {
       <section className="mission-agent-state"><ChatCircleDots /><div><strong>Research Agent</strong><small>以 Pi SDK AgentSession 为底座的多步工具循环；写入只产生草稿。</small></div></section>
       <section className="mission-guardrails"><strong>可信研究护栏</strong><ul><li>不编造文献或实验结果</li><li>具体判断回链项目对象</li><li>写入只创建草稿</li><li>不提供 Shell 或任意文件访问</li><li>默认关闭 bash / write / edit</li></ul></section>
     </aside>
-    {showSkills ? <AgentSkillsPanel skills={skills} loading={skillsLoading} error={skillsError} onRefresh={refreshSkills} onClose={() => setShowSkills(false)} /> : null}
     {historicalSkill && projectId ? <AgentSkillHistoryPreview projectId={projectId} conversationId={historicalSkill.conversationId} messageId={historicalSkill.messageId} usage={historicalSkill.usage} onClose={() => setHistoricalSkill(null)} /> : null}
   </div>;
 }

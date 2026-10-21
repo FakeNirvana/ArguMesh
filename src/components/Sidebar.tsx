@@ -1,7 +1,9 @@
-import { useMemo } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { NavLink, useLocation } from "react-router-dom";
-import { BookOpenText, Clock, Flask, FolderSimple, GearSix, GitBranch, GridFour, MagnifyingGlass, NotePencil, SidebarSimple, Sparkle } from "@phosphor-icons/react";
+import { BookOpenText, Clock, Flask, FolderSimple, GearSix, GitBranch, GridFour, MagnifyingGlass, NotePencil, PuzzlePiece, SidebarSimple, Sparkle } from "@phosphor-icons/react";
+import { listAgentSkills, type AgentSkillSummary } from "../api";
 import { useWorkspace } from "../state/workspace";
+import { AgentSkillsPanel } from "./AgentSkillsPanel";
 import { BrandMark } from "./BrandMark";
 
 interface NavItem {
@@ -15,6 +17,26 @@ interface NavItem {
 export function Sidebar({ open, onToggle }: { open: boolean; onToggle: () => void }) {
   const { settings, projects } = useWorkspace();
   const location = useLocation();
+  const [showSkills, setShowSkills] = useState(false);
+  const [skills, setSkills] = useState<AgentSkillSummary[]>([]);
+  const [skillsLoading, setSkillsLoading] = useState(false);
+  const [skillsError, setSkillsError] = useState("");
+  const skillsRequestRef = useRef(0);
+  const refreshSkills = useCallback(async () => {
+    const request = ++skillsRequestRef.current;
+    setSkillsLoading(true); setSkillsError("");
+    try {
+      const response = await listAgentSkills();
+      if (request === skillsRequestRef.current) setSkills(response.skills);
+    } catch (cause) {
+      if (request === skillsRequestRef.current) setSkillsError(cause instanceof Error ? cause.message : "无法加载技能，请重试。");
+    } finally { if (request === skillsRequestRef.current) setSkillsLoading(false); }
+  }, []);
+  useEffect(() => () => { skillsRequestRef.current += 1; }, []);
+  const refreshManagedSkills = useCallback(async () => {
+    await refreshSkills();
+    window.dispatchEvent(new Event("paperidea:agent-skills-changed"));
+  }, [refreshSkills]);
   const displayName = settings.displayName;
   const initials = useMemo(() => {
     const cleaned = displayName.trim();
@@ -79,6 +101,7 @@ export function Sidebar({ open, onToggle }: { open: boolean; onToggle: () => voi
             )}
           </>
         )}
+        <button type="button" title="管理技能" aria-label="管理技能" aria-haspopup="dialog" aria-expanded={showSkills} className={`nav-item${showSkills ? " active" : ""}`} onClick={() => { setShowSkills(true); void refreshSkills(); }}><PuzzlePiece /><span>管理技能</span></button>
       </nav>
       <div className="sidebar-bottom">
         <NavLink to="/search" className={({ isActive: active }) => `nav-item${active ? " active" : ""}`}><MagnifyingGlass /><span>全局搜索</span></NavLink>
@@ -88,6 +111,7 @@ export function Sidebar({ open, onToggle }: { open: boolean; onToggle: () => voi
         <div className="profile"><span>{initials}</span><div><strong>{displayName}</strong><small>本地工作台</small></div></div>
         <button type="button" className="icon-button sidebar-toggle" onClick={onToggle} aria-label={open ? "收起导航" : "展开导航"} aria-expanded={open}><SidebarSimple /></button>
       </div>
+      {showSkills ? <AgentSkillsPanel skills={skills} loading={skillsLoading} error={skillsError} onRefresh={refreshManagedSkills} onClose={() => setShowSkills(false)} /> : null}
     </aside>
   );
 }
