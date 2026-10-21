@@ -12,7 +12,7 @@
 | --- | --- |
 | 怎么跑起来、怎么测、环境变量 | [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md) |
 | 项目是什么、为谁做、不做什么 | [`docs/PROJECT-SPEC.md`](docs/PROJECT-SPEC.md) |
-| 代码怎么组织的、29 张表、路由与服务 | [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) |
+| 代码怎么组织的、30 张表、路由与服务 | [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) |
 | 有哪些页面、路由、旧链接兼容 | [`docs/PAGE-STRUCTURE.md`](docs/PAGE-STRUCTURE.md) |
 | 组件怎么写、样式 token、无障碍 | [`docs/COMPONENT-GUIDELINES.md`](docs/COMPONENT-GUIDELINES.md) |
 | 视觉方向、设计 QA 记录 | [`DESIGN.md`](DESIGN.md) |

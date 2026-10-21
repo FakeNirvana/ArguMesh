@@ -82,26 +82,42 @@ pnpm tauri build
 
 ## Research Agent 与 Skills 接入现状
 
-Research Agent 已使用 Pi `AgentSession` 与 `DefaultResourceLoader`；skills 的加载目录、自动选择限制与 `/skill:name 参数` 手动展开路径见 [`ARCHITECTURE.md` 的「Research Agent 与 skills」](ARCHITECTURE.md#research-agent-与-skills)。这记录的是现有底座，不表示已经提供 skills 安装、管理或通用脚本运行功能，也不新增实施排期。
+**本节对应 2026-10-21 新增源码功能，尚未发布新安装包。** Research Agent 内置证据梳理、实验规划和论文审查技能，并提供本地技能安装管理。对话可自动选择、指定技能或不使用技能；运行边界与记录方式见 [`ARCHITECTURE.md` 的「Research Agent 与 skills」](ARCHITECTURE.md#research-agent-与-skills)。
 
-- 调试发现路径时，先检查**服务启动目录** `process.cwd()`，不要把项目 `workspacePath` 当作 Agent 的 cwd。默认发现涉及该目录的 `.pi/skills/`、项目及祖先目录的 `.agents/skills/`、用户 `~/.agents/skills/` 和临时 `{agentDir}/skills/`；祖先范围与信任条件详见架构文档。不要将本机全局技能自动出现误认为仓库已内置它们。
-- 当前 `TOOL_NAMES` 只显式启用 11 个领域工具，没有 `read`、通用 shell 或任意文件执行。无 `read` 时 SDK 不向自定义系统提示附加技能目录；手动命令可展开已加载的技能正文，但不会让技能获得缺失的工具或脚本权限。
-- 核对加载和展开行为可使用临时技能与无模型检查：确认发现结果、对比有/无 `read` 时的系统提示、检查手动命令展开。隔离验证应显式关闭 extensions，并注意用户 `~/.agents/skills/` 仍是独立的默认发现来源；不要执行未知扩展或技能脚本来证明「已加载」。
-- 修改接入前应明确受限资源读取、执行边界和技能版本追踪；现有 `ai_actions` 是领域动作审计，不能替代技能来源/内容版本记录。相关入口是 `server/services/pi-agent.ts`、`pi-runtime.ts` 与 `server/routes/conversations.ts`，SDK 模块定位见架构文档。
+- **安装格式**：选择单个 `SKILL.md` 或包含它的技能文件夹，预览后安装。根文件须有 YAML frontmatter，`name` 使用小写字母、数字和连字符，`description` 非空；允许附带包内文本资料。最多 64 个文本文件，每文件 64 KiB、每包 512 KiB，`SKILL.md` 正文最多 32,000 字符。同名包不能静默覆盖；内置技能仅可启停，用户技能还可卸载。二进制资料不作为可读取文本导入；脚本即使保存，也只作为文本资料，不执行。
+- **本地保存**：安装内容和启停设置保存在应用数据库，由所有项目共用，不依赖 `process.cwd()` 或项目 `workspacePath`。SDK 的全局/项目技能、扩展、提示词和上下文文件自动发现已关闭；已有 `.agents/skills` 或 `.pi/skills` 不会自动出现在列表，需要通过安装入口导入。
+- **运行限制**：`skill_load` / `skill_read` 只读取本轮允许的技能及其包内文本；每轮最多加载三个技能，资源每段最多 12,000 字符、每轮最多 48,000 字符。领域工具继续保留每轮一个草稿写入和 `ai_actions` 审计，不因技能正文获得额外工具权限。
+- **历史与调试**：消息保留实际加载技能的完整内容快照、来源、内容哈希及加载时间；停用、卸载或重装不改写旧记录。使用模拟模型与临时数据库检查启停/选择、路径与大小校验、自动加载和历史保留；不以执行未知脚本或扩展证明技能可用。入口是 `server/routes/agent-skills.ts`、`server/services/agent-skills.ts`、`server/services/pi-agent.ts` 和 `server/routes/conversations.ts`。
+
+一个最小的 `SKILL.md` 示例：
+
+```markdown
+---
+name: research-checklist
+description: 用项目已有证据检查研究问题是否清楚、可验证。
+---
+
+先读取当前项目上下文，区分已有事实与待验证假设。
+按“研究问题、支持证据、缺失条件、下一步核验”给出检查结果。
+只引用实际提供的项目对象；资料不足时明确说明，不编造文献或结果。
+```
+
+若需要额外清单，可把它保存为技能文件夹中的 `references/checklist.md` 并在正文引用；Agent 按需通过 `skill_read` 读取该包内文本。安装来源限本地文件与文件夹，当前没有 GitHub URL 安装或第三方脚本执行入口。
 
 ## 迁移是双轨的
 
 - **`drizzle/` + journal（`drizzle/meta/_journal.json`）覆盖 0000–0007**，由 `scripts/migrate.ts` 应用（`pnpm run db:migrate`）。
-- **0007 之后全部由 `scripts/migrate-custom.ts` 逐条手写执行**：`0008_drop_accounts`、`0009_workspace_path`、`0010_research_question_origins`、`0011_experiment_result_analysis`、`0012_research_agent_conversations`、`0013_research_question_conclusions`、`0014_research_question_evidence`。原因是 drizzle migrator 的 libsql 批处理路径会在多语句迁移上抛 `SQLITE_UNKNOWN_0`。每个 hash 会登记进 `__drizzle_migrations`。
+- **0007 之后全部由 `scripts/migrate-custom.ts` 逐条手写执行**：`0008_drop_accounts`、`0009_workspace_path`、`0010_research_question_origins`、`0011_experiment_result_analysis`、`0012_research_agent_conversations`、`0013_research_question_conclusions`、`0014_research_question_evidence`、`0015_agent_skills`。原因是 drizzle migrator 的 libsql 批处理路径会在多语句迁移上抛 `SQLITE_UNKNOWN_0`。每个 hash 会登记进 `__drizzle_migrations`。
 - `tests/api/helpers.ts` 用同一个脚本构建全新临时库。
-- schema 注释里还提到 0015/0016（`evidence_layers.promotedTo`），**没有对应的 journal 或 SQL**——把那些注释当历史看。
+- `0015_agent_skills` 新增 `agent_skills` 表，并为 `ai_messages` 增加 `skills_json`（默认 `[]`，实际加载快照）与 `skill_selection_json`（默认 `null`，自动选择；`[]` 表示不使用技能）列，保留已有消息与研究数据。源码旧库升级先确认 `DATABASE_URL` 指向需要升级的库，再运行 `pnpm exec tsx scripts/migrate-custom.ts`；`pnpm run db:migrate` 只处理上面的 drizzle 轨道，不能替代本迁移。
+- schema 旧注释还把 0015/0016 用于 `evidence_layers.promotedTo`，那部分没有独立 journal / SQL，属于历史说明；不要与实际的 `0015_agent_skills` 混淆。
 
 **改 schema 之后**：0000–0007 形状的改动走 `pnpm run db:generate`；其他情况扩展 `migrate-custom.ts`。
 
 ## 测试
 
-- **`tests/unit/**`（12 个文件）** — happy-dom，覆盖浏览器侧模块：`src/api.ts`、workspace、PDF `blocks`/`selection` 几何、LaTeX 日志解析、web search、agent 传输错误、paper-files 隔离、citations-from-actions。
-- **`tests/api/**`（14 个测试文件 + `helpers.ts`）** — 每个文件顶部有 `// @vitest-environment node` docblock。`helpers.ts` 给每个文件一个临时 SQLite 库（全新、经 `migrate-custom.ts` 迁移、无账号种子）加 `app.request(url, init, bindings)`。**新 binding 必须加进 `helpers.ts`**（`LATEX_ENGINE_PATH`、`SEARXNG_BASE_URL`、`SEARXNG_TIMEOUT_MS` 已在）。临时目录尽力清理（Windows 文件句柄可能残留，无害）。
+- **`tests/unit/**`** — 默认 happy-dom，服务端单测用文件头切换 Node 环境。覆盖浏览器状态、阅读器、API 助手和 Agent 生命周期；skills 用例检查安装预览、选择/重试、历史预览、受限资源读取和写入校验。
+- **`tests/api/**` + `helpers.ts`** — 每个文件顶部有 `// @vitest-environment node` docblock。`helpers.ts` 给每个文件一个临时 SQLite 库（全新、经 `migrate-custom.ts` 迁移、无账号种子）加 `app.request(url, init, bindings)`；skills 用例还覆盖安装管理、旧库迁移、fresh seed 幂等及消息快照保留。**新 binding 必须加进 `helpers.ts`**（`LATEX_ENGINE_PATH`、`SEARXNG_BASE_URL`、`SEARXNG_TIMEOUT_MS` 已在）。临时目录尽力清理（Windows 文件句柄可能残留，无害）。
 - **`tests/fixtures/`** — 小样本 PDF、假 tectonic 的 `main.tex`、阅读器划词样本。
 - **本 checkout 没有 CI 配置**——typecheck / test / build 都是交付前的手动门禁。
 

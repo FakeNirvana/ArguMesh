@@ -1117,6 +1117,32 @@ export async function analyzeExperimentResult(projectId: string, experimentId: s
 }
 
 // ─── Persistent Research Agent ───
+export type { AgentSkill, AgentSkillFile, AgentSkillSnapshot, AgentSkillSummary, AgentSkillUsage } from "../shared/agent-skills";
+import type { AgentSkill, AgentSkillFile, AgentSkillSnapshot, AgentSkillSummary, AgentSkillUsage } from "../shared/agent-skills";
+
+export async function listAgentSkills(): Promise<{ skills: AgentSkillSummary[] }> {
+  return parseResponse(await fetch("/api/agent/skills", { headers: authenticatedHeaders() }));
+}
+export async function getAgentSkill(id: string): Promise<{ skill: AgentSkill }> {
+  return parseResponse(await fetch(`/api/agent/skills/${encodeURIComponent(id)}`, { headers: authenticatedHeaders() }));
+}
+export async function installAgentSkill(files: AgentSkillFile[]): Promise<{ skill: AgentSkill }> {
+  return parseResponse(await fetch("/api/agent/skills", {
+    method: "POST", headers: authenticatedHeaders({ "content-type": "application/json" }), body: JSON.stringify({ files }),
+  }));
+}
+export async function setAgentSkillEnabled(id: string, enabled: boolean): Promise<{ skill: AgentSkill }> {
+  return parseResponse(await fetch(`/api/agent/skills/${encodeURIComponent(id)}`, {
+    method: "PATCH", headers: authenticatedHeaders({ "content-type": "application/json" }), body: JSON.stringify({ enabled }),
+  }));
+}
+export async function uninstallAgentSkill(id: string): Promise<{ removed: true }> {
+  return parseResponse(await fetch(`/api/agent/skills/${encodeURIComponent(id)}`, { method: "DELETE", headers: authenticatedHeaders() }));
+}
+export async function getAgentSkillSnapshot(projectId: string, conversationId: string, messageId: string, skillId: string): Promise<{ skill: AgentSkillSnapshot }> {
+  return parseResponse(await fetch(`/api/projects/${encodeURIComponent(projectId)}/ai/conversations/${encodeURIComponent(conversationId)}/messages/${encodeURIComponent(messageId)}/skills/${encodeURIComponent(skillId)}`, { headers: authenticatedHeaders() }));
+}
+
 export interface AiConversation {
   id: string;
   projectId: string;
@@ -1137,6 +1163,8 @@ export interface AiMessage {
   conversationId: string;
   projectId: string;
   role: "user" | "assistant";
+  skillSelection?: string[] | null;
+  skills?: AgentSkillUsage[];
   content: string;
   citations: AiCitation[];
   model: string | null;
@@ -1244,13 +1272,14 @@ export async function sendAiMessage(
   content: string,
   onEvent?: (event: { type: string; [key: string]: unknown }) => void,
   signal?: AbortSignal,
+  options?: { skillIds?: string[] },
 ): Promise<{ message: AiMessage; action: AiAction | null; mode: string }> {
   let response: Response;
   try {
     response = await fetch(`/api/projects/${encodeURIComponent(projectId)}/ai/conversations/${encodeURIComponent(conversationId)}/messages`, {
       method: "POST",
       headers: authenticatedHeaders({ "content-type": "application/json" }),
-      body: JSON.stringify({ content }),
+      body: JSON.stringify({ content, ...(options?.skillIds !== undefined ? { skillIds: options.skillIds } : {}) }),
       signal,
     });
   } catch (cause) {

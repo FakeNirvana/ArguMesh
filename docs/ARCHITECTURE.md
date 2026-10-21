@@ -24,13 +24,14 @@
 ```
 server/
 ├── node.ts            # Web 宿主
-├── index.ts           # Hono app：无鉴权门，20 个路由模块挂在 /api 下
+├── index.ts           # Hono app：无鉴权门，路由模块挂在 /api 下
 ├── env.ts             # loadBindings() → AppBindings
 ├── types.ts           # AppBindings / AppEnv
 ├── ai/                # 无 DB 依赖的能力层
 ├── db/                # client.ts / schema.ts / projects.ts
-├── routes/            # 20 个文件
-└── services/          # 12 个文件
+├── routes/            # API 处理器
+├── services/          # 领域与执行助手
+└── skills/            # 随应用编译的内置科研技能
 ```
 
 ### `index.ts`
@@ -39,52 +40,46 @@ server/
 
 ### `db/`
 
-- **`schema.ts` 是 canonical 表清单：29 张表**，所有外键 cascade-delete。
+- **`schema.ts` 是 canonical 表清单：30 张表**，所有外键 cascade-delete。
   - **核心 10 张**：`projects`（含 `workspace_path`）、`papers`、`paper_files`（PDF BLOB）、`project_papers`、`matrices`、`matrix_papers`、`dimensions`、`evidence_cells`、`extraction_jobs`、`ai_settings`
   - **研究弧线 19 张**：`knowledge_items`、`knowledge_relations`、`research_questions`、`rq_papers`、`research_question_origins`、`research_question_conclusions`、`research_question_evidence`、`gaps`、`gap_evidence`、`ideas`、`idea_versions`、`idea_evidence`、`idea_reviews`、`experiments`、`experiment_results`、`ai_conversations`、`ai_messages`、`ai_actions`、`evidence_layers`
+  - **技能注册表 1 张**：`agent_skills`，保存用户技能包与内置技能的启停设置；`ai_messages.skills_json` / `skill_selection_json` 保存各轮实际加载快照与用户选择。
 - **`projects.ts`** — `projectExists(env, id)`，单用户版替代 prototype 的 `findOwnedProject`；路由用它做 404 存在性检查（没有归属层可作用）。
 - `client.ts` — `createDatabase(env)`，client 按连接串缓存。
 
-### `routes/`（20 个，全部挂在 `/api`）
+### `routes/`（全部挂在 `/api`）
 
 - **核心** — `ai`（全局配置）、`papers`、`files`（PDF BLOB 写入 `paper_files`，≤25 MB，必须带 `Content-Length`）、`library`（含 `…/library/scan-inbox`，扫工作区 `literature/` 收件箱）、`projects`、`matrix`（+ 带锁定单元格守卫的 evidence PATCH）、`extraction`、`card`、`reader`（`/reader/ask` 划词问答 + `/reader/translate` 划词翻译，进程内内存限流）
 - **研究弧线** — `knowledge`（`/extract`、`/analyze`、`/relations`）、`researchThread`（`/research-thread` + 洞见提升）、`researchQuestions`、`gaps`、`ideas`、`reviews`、`experiments`（`/design`、`/design-with-ai`、结果 `import`/`analyze`）、`evidenceLayers`（`/interpret|imply|promote`）
 - **Agent 与写作** — `conversations`（`/projects/:projectId/ai/conversations[/:id|/messages|/cancel]`）、`writing`（`/paper/…` initialize、source、outline、patch、`proposals/:actionId`、bibliography、compile + `/compile/cancel` + `/compile-status`、pdf、snapshots + `snapshots/:snapshotId/restore`）、`system`（`/system/pick-directory`、`/system/open-path`）
+- **Agent 技能** — `agent-skills`（`/agent/skills` 列表与本地包安装；`/:id` 查看、启停与用户技能卸载），在本机所有项目间共用。
 
 以目录为准，这里不是穷举。
 
-### `services/`（12 个）
+### `services/`
 
 - **AI 管线** — `ai.ts`（provider 注册表 + `resolveAiForRequest`、`LOCAL_AI_ACCOUNT_ID`）、`stepfun.ts`（单 provider 客户端 + `stripThinkBlock` + `inferAiApiFormat`）、`pi-agent.ts`（Pi `AgentSession` 轮次执行器：SSE 事件、工具白名单、`citationsFromActions`、`normalizeAgentTransportError`）、`pi-runtime.ts`（把 app AI 配置桥接到 Pi model 接口）、`research-agent.ts`（白名单领域动作执行器）、`project-context.ts`（有界上下文装配 + `PROJECT_CONTEXT_LIMITS`）、`result-analysis.ts`、`web-search.ts`（SearXNG JSON 客户端）
 - **领域** — `latex.ts`（引擎探测/编译/取消/状态/PDF 路径/日志解析）、`paper-files.ts`（LaTeX 工作区读写、快照、大纲解析、缺失引用检测）、`literature-inbox.ts`（`{workspacePath}/literature/` 扫描，50 文件 / 25 MB 上限）、`native-picker.ts`（拉起系统目录选择对话框/路径打开——**全应用唯一的子进程代码**）
 
 ### Research Agent 与 skills
 
-**现状核验：2026-10-21，Pi SDK `@earendil-works/pi-coding-agent` 0.84.3。** 已有技能发现、加载和手动展开的底座，但尚未形成完整的 skills 产品功能；本节只记录实现，不代表新增能力或排期。升级 SDK 后需重新核验其默认行为。
+**源码新增（2026-10-21，尚未发布安装包）。** Research Agent 的技能发现、安装与使用由应用管理。内置内容在 `server/skills/builtin.ts` 编译进 Web / 桌面服务，用户从对话区导入本地 `SKILL.md` 或技能文件夹，经预览后安装。`server/routes/agent-skills.ts` 处理管理写入，`server/services/agent-skills.ts` 解析包、装配注册表；`shared/agent-skills.ts` 是前后端共享类型。
 
-`server/routes/conversations.ts` 将用户消息交给 `server/services/pi-agent.ts` 的 `runPiAgentTurn()`。后者通过 `DefaultResourceLoader.reload()` 加载资源，再把同一 loader 传给 `createAgentSession()`；没有显式设置 `noSkills` / `noExtensions`，因此沿用 SDK 的默认资源发现行为。
-
-资源路径由**服务进程的启动目录** `process.cwd()` 决定，未切换到项目的 `projects.workspace_path`。`server/services/pi-runtime.ts` 的 `createPiModelBridge()` 将 `agentDir` 设置为 `tmpdir()/argumesh-pi-agent`；它不是项目工作区，也不是持久的技能配置目录。当前 SDK 默认可发现以下技能来源：
-
-| 来源 | 发现位置 |
+| 来源 | 保存与管理 |
 | --- | --- |
-| Pi 项目技能 | `{process.cwd()}/.pi/skills/` |
-| 项目及祖先目录的共享技能 | 从 `process.cwd()` 向上查找 `.agents/skills/`；找到 Git 仓库时止于仓库根，否则止于文件系统根 |
-| 用户共享技能 | `~/.agents/skills/`，独立于应用传入的临时 `agentDir` |
-| Pi 用户技能 | `{agentDir}/skills/`；ArguMesh 当前对应临时目录下的 `argumesh-pi-agent/skills/` |
+| 内置技能 | `evidence-review`、`experiment-planning`、`manuscript-review` 三个完整 `SKILL.md`；可查看与启停，不可卸载 |
+| 用户技能 | `agent_skills` 保存完整文本包、内容哈希、来源与时间；可查看、启停、卸载，同机所有项目共用 |
+| 本轮实际使用 | `ai_messages.skills_json` 保存加载时的完整内容快照及版本、来源、时间，消息关联实际模型；`skill_selection_json` 保存本轮选择供历史与重试使用 |
 
-项目来源受 SDK 的 `projectTrusted` 设置控制；当前应用使用的 `SettingsManager.inMemory()` 默认信任项目。仓库没有随源码提供 `.pi/skills/` 或 `.agents/skills/`，也没有 skills 管理 API 或界面；本机已有的用户共享技能仍可能被默认发现。
+安装包须有唯一根 `SKILL.md`，也可带一个共同的技能文件夹前缀。最多 64 个文本文件，每文件 64 KiB、每包 512 KiB，`SKILL.md` 正文最多 32,000 字符。后端拒绝绝对路径、路径穿越、重复路径及不合规文本包；不读取用户提交的服务器磁盘路径。同名安装返回冲突，不静默替换内置或已安装内容。脚本可作为文本资料保留并提示兼容限制，不执行。
 
-技能的两种调用路径目前不同：
+`server/routes/conversations.ts` 在回合开始时确定允许的启用技能及内容版本。对话选择「自动选择」时，模型获得技能目录并通过 `skill_load` 按需加载；指定技能时先加载该技能；「不使用技能」时本轮没有可加载技能。兼容 `/skill:name 参数` 的手动指令也只在应用管理的本轮允许范围内解析，停用或未知技能不会落回隐式文件发现。
 
-- **模型自动选择未接通。** 应用自定义了系统提示，且工具白名单没有 `read`。SDK 在这种情况下不会把已加载技能的目录附加到系统提示；Agent 也没有读取技能正文及其相对引用文件的通用工具。
-- **手动 `/skill:name 参数` 有 SDK 基础。** 消息进入 `session.prompt()` 后，SDK 会查找已加载的同名技能，直接读取 `SKILL.md` 并把正文与参数展开到本轮输入。这一步不依赖 `read` 工具；技能不存在时，原文继续作为普通消息。应用尚无技能选择器或针对该语法的产品提示。
+`skill_load` / `skill_read` 是只读工具：一轮最多加载三个技能，资源读取只访问已允许技能的包内文本，每段最多 12,000 字符、每轮最多 48,000 字符。它们不消耗领域写入额度。实际加载后立即记录快照，失败和取消也保留已有加载记录；卸载、停用或重新安装不改写旧快照。领域动作仍由 `runDomainAction()` 转交 `executeWhitelistedAgentAction()`，每轮最多一个，输出经 schema 校验并记入 `ai_actions`。
 
-应用显式启用的是 `pi-agent.ts` 中 `TOOL_NAMES` 列出的 **11 个领域工具**：项目上下文、网页搜索及九个受控领域动作。该白名单未提供通用 shell、任意文件读写或代码执行工具，不能据此宣称第三方技能的脚本和配套工具都可运行。技能正文也不会自动赋予工具权限；领域动作由 `runDomainAction()` 转交 `executeWhitelistedAgentAction()`，每轮最多执行一个，并记入 `ai_actions`。资源发现沿用 SDK 默认行为，不能把领域工具白名单等同于资源加载沙箱。
+`DefaultResourceLoader` 显式关闭 SDK 的 skills、extensions、prompt templates、themes 与 context files 加载，并使用应用自己的系统提示，不读取隐式 SYSTEM / APPEND_SYSTEM 提示文件。服务 cwd、项目 `workspacePath`、用户或祖先 `.agents/skills` / `.pi/skills` 中已有技能不会隐式加载进会话；第三方技能不能运行 Pi 扩展、任意 Shell、Python 或文件写入。旧轮加载过技能后，下一轮会重建 Pi 会话并恢复有界的已完成对话，避免旧技能指令因会话缓存继续生效；技能目录变化也会触发重建。
 
-尚缺技能的导入/启停/选择与来源管理、限定技能目录的资源读取、脚本执行边界，以及技能内容版本/快照与每轮调用关联的追踪。现有对话和动作记录不等于技能版本追踪；这些均是现状缺口，不在本节新增待办。
-
-**维护定位**：应用侧查看 `server/services/pi-agent.ts` 的 `getOrCreateSession()` / `TOOL_NAMES`、`server/services/pi-runtime.ts` 的 `createPiModelBridge()` 与 `server/routes/conversations.ts`。SDK 侧在已安装的 `@earendil-works/pi-coding-agent` 包中查看 `dist/core/resource-loader.js`（加载）、`package-manager.js`（默认目录与信任边界）、`skills.js`（`SKILL.md` 解析）、`system-prompt.js`（`read` 条件）及 `agent-session.js` 的 `_expandSkillCommand()`（手动展开）；不依赖机器绝对路径或易漂移的行号。
+**维护定位**：安装管理看 `server/routes/agent-skills.ts` / `server/services/agent-skills.ts`；回合边界与记录看 `server/routes/conversations.ts`；技能加载、资源读取与会话重建看 `server/services/pi-agent.ts`；迁移 `0015_agent_skills` 在 `scripts/migrate-custom.ts`。技能正文与资料始终作为低于系统规则的不可信输入，工具白名单和应用校验继续决定可执行动作。
 
 ### `server/ai/`——无 DB 依赖的能力层
 

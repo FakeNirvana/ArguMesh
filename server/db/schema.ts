@@ -565,12 +565,31 @@ export const aiMessages = sqliteTable(
     role: text("role", { enum: ["user", "assistant"] }).notNull(),
     content: text("content").notNull(),
     citationsJson: text("citations_json").notNull().default("[]"),
+    skillsJson: text("skills_json").notNull().default("[]"),
+    skillSelectionJson: text("skill_selection_json").notNull().default("null"),
     model: text("model"),
     status: text("status", { enum: ["pending", "completed", "failed", "cancelled"] }).notNull().default("completed"),
     error: text("error").notNull().default(""),
     createdAt: text("created_at").notNull(),
   },
   (table) => [index("ai_messages_conversation_created_idx").on(table.conversationId, table.createdAt)],
+);
+
+/** Installed text-only skills; builtin rows store enable/disable overrides only. */
+export const agentSkills = sqliteTable(
+  "agent_skills",
+  {
+    id: text("id").primaryKey(),
+    name: text("name").notNull(),
+    description: text("description").notNull().default(""),
+    source: text("source", { enum: ["builtin", "user"] }).notNull(),
+    filesJson: text("files_json").notNull().default("[]"),
+    enabled: integer("enabled", { mode: "boolean" }).notNull().default(true),
+    version: text("version").notNull().default(""),
+    installedAt: text("installed_at"),
+    updatedAt: text("updated_at").notNull(),
+  },
+  (table) => [uniqueIndex("agent_skills_name_uniq").on(table.name)],
 );
 
 /** Research Agent 的受限领域动作审计记录。 */

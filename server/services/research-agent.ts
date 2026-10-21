@@ -11,6 +11,7 @@ import { containsDangerousLatex } from "./paper-files";
 import { analysisReferencesExist, persistResultAnalysisDraft } from "./result-analysis";
 import { compilePaper } from "./latex";
 import type { z } from "zod";
+import type { AgentSkill, AgentSkillSnapshot } from "../../shared/agent-skills";
 
 type AgentOutput = z.infer<typeof researchAgentOutputSchema>;
 
@@ -20,6 +21,9 @@ export interface AgentTurnInput {
   assistantMessageId: string;
   message: string;
   history: Array<{ role: "user" | "assistant"; content: string }>;
+  availableSkills?: AgentSkill[];
+  selectedSkillIds?: string[];
+  onSkillLoaded?: (skill: AgentSkillSnapshot) => Promise<void>;
 }
 
 /** 白名单写动作执行器（Research Agent 与 Pi SDK 共用；始终以 draft / 提案形式落库）。 */

@@ -1,4 +1,4 @@
-import { ArrowRight, BookOpenText, Brain, CaretDown, ChatCircleDots, ClockCounterClockwise, Flask, FolderSimple, GitBranch, GridFour, PaperPlaneTilt, Stop, Trash, Wrench } from "@phosphor-icons/react";
+import { ArrowRight, BookOpenText, Brain, CaretDown, ChatCircleDots, ClockCounterClockwise, Flask, FolderSimple, GitBranch, GridFour, PaperPlaneTilt, PuzzlePiece, Stop, Trash, Wrench } from "@phosphor-icons/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import {
@@ -10,17 +10,23 @@ import {
   getResearchThread,
   listAiConversations,
   listExperiments,
+  listAgentSkills,
   sendAiMessage,
   type AiAction,
   type AiConversation,
   type AiMessage,
+  type AgentSkillSummary,
+  type AgentSkillUsage,
   type ResearchThread,
 } from "../api";
 import { AgentMarkdown } from "../components/AgentMarkdown";
+import { AgentSkillHistoryPreview, AgentSkillsPanel } from "../components/AgentSkillsPanel";
 import { EmptyState } from "../components/states";
 import { useWorkspace } from "../state/workspace";
 
 const TOOL_LABELS: Record<string, string> = {
+  skill_load: "加载研究技能",
+  skill_read: "读取技能资料",
   web_search: "网页搜索",
   project_context: "读取项目上下文",
   insight_create_draft: "已创建研究洞见草稿",
@@ -47,8 +53,32 @@ export function ProjectHomePage() {
   const [sending, setSending] = useState(false);
   const [streamHint, setStreamHint] = useState("");
   const [error, setError] = useState("");
+  const [skills, setSkills] = useState<AgentSkillSummary[]>([]);
+  const [skillsLoading, setSkillsLoading] = useState(true);
+  const [skillsError, setSkillsError] = useState("");
+  const [selectedSkill, setSelectedSkill] = useState("auto");
+  const [showSkills, setShowSkills] = useState(false);
+  const [historicalSkill, setHistoricalSkill] = useState<{ messageId: string; conversationId: string; usage: AgentSkillUsage } | null>(null);
+  const skillsRequestRef = useRef(0);
   const endRef = useRef<HTMLDivElement>(null);
   const sendingRef = useRef<AbortController | null>(null);
+  const refreshSkills = useCallback(async () => {
+    const request = ++skillsRequestRef.current;
+    setSkillsLoading(true); setSkillsError("");
+    try {
+      const response = await listAgentSkills();
+      if (request !== skillsRequestRef.current) return;
+      setSkills(response.skills);
+      setSelectedSkill((current) => current === "auto" || current === "none" || response.skills.some((skill) => skill.id === current && skill.enabled) ? current : "auto");
+    } catch (cause) {
+      if (request === skillsRequestRef.current) setSkillsError(cause instanceof Error ? cause.message : "无法加载技能，请重试。");
+    } finally { if (request === skillsRequestRef.current) setSkillsLoading(false); }
+  }, []);
+  useEffect(() => {
+    setSelectedSkill("auto"); setShowSkills(false); setHistoricalSkill(null); setSkills([]);
+    void refreshSkills();
+    return () => { skillsRequestRef.current += 1; };
+  }, [projectId, refreshSkills]);
   useEffect(() => {
     setSending(false); setStreamHint(""); setError("");
     return () => { sendingRef.current?.abort(); sendingRef.current = null; };
@@ -120,13 +150,13 @@ export function ProjectHomePage() {
       await loadConversation(projectId, remaining[0].id);
     }
   }
-  async function submitContent(content: string) {
+  async function submitContent(content: string, skillSelection: string[] | null = selectedSkill === "auto" ? null : selectedSkill === "none" ? [] : [selectedSkill]) {
     if (!projectId || !activeId || !content.trim() || sendingRef.current || active?.status === "cancelled") return;
     const controller = new AbortController();
     sendingRef.current = controller;
     const optimistic: AiMessage = {
       id: `local-${Date.now()}`, conversationId: activeId, projectId, role: "user", content: content.trim(), citations: [],
-      model: null, status: "completed", error: "", createdAt: new Date().toISOString(),
+      model: null, status: "completed", error: "", createdAt: new Date().toISOString(), skillSelection,
     };
     setMessages((items) => [...items, optimistic]); setSending(true); setError(""); setStreamHint("Research Agent 推理中…");
     try {
@@ -138,7 +168,7 @@ export function ProjectHomePage() {
         }
         else if (event.type === "text_delta") setStreamHint("生成回复中…");
         else if (event.type === "agent_end" || event.type === "done") setStreamHint("");
-      }, controller.signal);
+      }, controller.signal, { skillIds: skillSelection ?? undefined });
       if (sendingRef.current !== controller) return;
       await loadConversation(projectId, activeId, () => sendingRef.current === controller);
       if (sendingRef.current !== controller) return;
@@ -218,9 +248,10 @@ export function ProjectHomePage() {
               ) : null}
               {message.status === "failed" ? <div className="agent-failure"><span>{message.error || "本回合失败"}</span><button disabled={sending || active?.status === "cancelled"} onClick={() => {
                 const index = messages.findIndex((item) => item.id === message.id); const previous = [...messages.slice(0, index)].reverse().find((item) => item.role === "user");
-                if (previous) void submitContent(previous.content);
+                if (previous) void submitContent(previous.content, previous.skillSelection ?? null);
               }}>重试</button></div> : null}
               {message.citations.length ? <div className="agent-citations">{message.citations.map((citation) => <Link to={citation.href} key={`${citation.kind}-${citation.id}`}><BookOpenText />{citation.label}</Link>)}</div> : null}
+              {message.role === "assistant" && message.skills?.length ? <div className="agent-used-skills" aria-label="本回合使用的技能">{message.skills.map((skill) => <button type="button" key={`${skill.id}-${skill.version}`} onClick={() => setHistoricalSkill({ messageId: message.id, conversationId: message.conversationId, usage: skill })} title={`查看本回合的原版本\n技能来源：${skill.source === "builtin" ? "内置" : "用户安装"}\n内容版本：${skill.version}`}><PuzzlePiece /><strong>{skill.name}</strong><small>{skill.source === "builtin" ? "内置" : "用户安装"} · {skill.version.slice(0, 8)}</small></button>)}</div> : null}
               {action ? <div className={`agent-action agent-action-${action.status}`}><Wrench /><span><strong>{TOOL_LABELS[action.toolName] ?? action.toolName}</strong>{action.error || "已记录到项目，并保留动作历史。"}</span>{action.output.href ? <Link to={action.output.href}>查看 <ArrowRight /></Link> : null}</div> : null}
             </div>
           </article>;
@@ -231,6 +262,11 @@ export function ProjectHomePage() {
 
       <form className="agent-composer" onSubmit={submit}>
         {error ? <div className="agent-composer-error" role="status">{error}</div> : null}
+        <div className="agent-skill-composer-controls">
+          <label><PuzzlePiece /><span className="visually-hidden">本回合研究技能</span><select aria-label="本回合研究技能" value={selectedSkill} disabled={sending || skillsLoading || active?.status === "cancelled"} onChange={(event) => setSelectedSkill(event.target.value)}><option value="auto">自动选择技能</option><option value="none">不使用技能</option>{(["builtin", "user"] as const).map((source) => <optgroup key={source} label={source === "builtin" ? "内置技能" : "已安装的技能"}>{skills.filter((skill) => skill.source === source && skill.enabled).map((skill) => <option key={skill.id} value={skill.id}>{skill.name}</option>)}</optgroup>)}</select></label>
+          <button type="button" disabled={sending} onClick={() => setShowSkills(true)}>管理技能{skillsLoading ? "…" : ` · ${skills.filter((skill) => skill.enabled).length}`}</button>
+          {skillsError ? <button type="button" className="agent-skill-retry" disabled={sending || skillsLoading} onClick={() => void refreshSkills()} title={skillsError}>技能加载失败，重试</button> : null}
+        </div>
         <div className="agent-composer-box"><textarea name="message" required disabled={sending || active?.status === "cancelled"} placeholder={active?.status === "cancelled" ? "该会话已结束，请新建对话" : "询问项目证据、形成研究问题、设计实验或分析真实结果…"} onKeyDown={(event) => {
           if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); event.currentTarget.form?.requestSubmit(); }
         }} /><button className="primary" disabled={sending || active?.status === "cancelled"} aria-label="发送"><PaperPlaneTilt /></button></div>
@@ -256,5 +292,7 @@ export function ProjectHomePage() {
       <section className="mission-agent-state"><ChatCircleDots /><div><strong>Research Agent</strong><small>以 Pi SDK AgentSession 为底座的多步工具循环；写入只产生草稿。</small></div></section>
       <section className="mission-guardrails"><strong>可信研究护栏</strong><ul><li>不编造文献或实验结果</li><li>具体判断回链项目对象</li><li>写入只创建草稿</li><li>不提供 Shell 或任意文件访问</li><li>默认关闭 bash / write / edit</li></ul></section>
     </aside>
+    {showSkills ? <AgentSkillsPanel skills={skills} loading={skillsLoading} error={skillsError} onRefresh={refreshSkills} onClose={() => setShowSkills(false)} /> : null}
+    {historicalSkill && projectId ? <AgentSkillHistoryPreview projectId={projectId} conversationId={historicalSkill.conversationId} messageId={historicalSkill.messageId} usage={historicalSkill.usage} onClose={() => setHistoricalSkill(null)} /> : null}
   </div>;
 }

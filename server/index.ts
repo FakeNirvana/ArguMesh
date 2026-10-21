@@ -22,6 +22,7 @@ import { systemRoutes } from "./routes/system";
 import { conversationRoutes } from "./routes/conversations";
 import { writingRoutes } from "./routes/writing";
 import { workspaceRoutes } from "./routes/workspace";
+import { agentSkillRoutes } from "./routes/agent-skills";
 import { getAiProviders } from "./services/ai";
 import { isWebSearchConfigured } from "./services/web-search";
 import type { AppEnv } from "./types";
@@ -63,6 +64,7 @@ app.route("/api", experimentRoutes);
 app.route("/api", evidenceLayerRoutes);
 app.route("/api", systemRoutes);
 app.route("/api", conversationRoutes);
+app.route("/api", agentSkillRoutes);
 app.route("/api", writingRoutes);
 app.route("/api", workspaceRoutes);
 

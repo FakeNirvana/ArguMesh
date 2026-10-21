@@ -3,6 +3,7 @@ import { createClient } from "@libsql/client";
 import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { loadBindings } from "../server/env";
+import { migrateDatabase } from "./migrate-custom";
 
 /**
  * 全新安装入口:建表(IF NOT EXISTS)+ 演示项目(单用户本地版,无账户)。
@@ -522,4 +523,6 @@ for (const [hash, createdAt] of [
 console.log(`已登记 ${journal.entries.length} 个 Drizzle 迁移与 5 个自定义迁移。`);
 
 client.close();
+// Keep post-bootstrap changes on the same migration track as existing installs.
+await migrateDatabase(url, authToken);
 console.log("种子完成:演示项目 demo-occluded-pose。运行 pnpm run dev 即可开始使用。");

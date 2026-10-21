@@ -8,6 +8,15 @@ ArguMesh（论脉）的版本历史。README 只保留指向本文件的入口�
 
 ---
 
+## Unreleased (2026-10-21) — Research Agent skills
+
+- Added three bundled research skills for evidence review, experiment planning and manuscript review, plus local `SKILL.md` / skill-folder preview and installation in Research Agent. Users can inspect and enable/disable skills, uninstall user-installed skills, and choose automatic selection, a specific skill or no skills for a turn. Installations stay in the local database and are shared across projects; this source change is not yet available in published installers.
+- Added bounded `skill_load` / `skill_read` tools, retaining the actual loaded skill's source, content hash, load time and full text snapshot with its message, including failed or cancelled turns. Previous snapshots survive uninstall/reinstall. Disabled Pi's implicit skill, extension, prompt and context-file discovery; imported scripts are text resources only and are never executed. Existing draft-only domain tools and the one-write-per-turn guard remain in place.
+- Added the incremental custom migration `0015_agent_skills`: an `agent_skills` table and `ai_messages.skills_json` / `skill_selection_json` columns. Existing research data remains; run the custom migration on source databases before using the feature. No cloud services, accounts or new keyboard shortcuts.
+- Research Agent 新增证据梳理、实验规划与论文审查三个内置技能，并支持预览安装本地 `SKILL.md` / 技能文件夹。可查看、启停技能，卸载用户技能，并为对话选择自动使用、指定技能或不使用技能；安装内容在本机数据库保存，所有项目共用。本次为源码新增，尚未发布新安装包。
+- 新增有界 `skill_load` / `skill_read` 工具，按消息保留实际加载技能的来源、内容哈希、时间与完整文本快照，包括失败或取消的回合；卸载或重装不改写旧快照。关闭 Pi 隐式扫描技能、扩展、提示词与上下文文件；导入的脚本仅作为文本资料保存，不执行。保留领域工具的草稿写入与每轮一个写入动作限制。
+- 新增增量 custom 迁移 `0015_agent_skills`：`agent_skills` 表与 `ai_messages.skills_json` / `skill_selection_json` 列。保留已有研究数据；源码旧库使用该功能前需执行 custom 迁移。无新增云服务、账号或键盘快捷键。
+
 ## Docs (2026-10-21) — Research Agent skills integration status
 
 - Documented the existing Pi SDK skill discovery and manual `/skill:name` expansion, including user-level `.agents/skills` discovery, startup-directory scope and the temporary agent directory. Distinguished these SDK mechanisms from the missing model-visible catalog, controlled skill-resource loading, management and version tracking, and general script execution. Synchronized development, architecture, status and all three README documents, and aligned the development guide's README language rule with `AGENTS.md`. Documentation only; no application, dependency or database migration changes.

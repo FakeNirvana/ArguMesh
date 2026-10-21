@@ -18,6 +18,7 @@ beforeEach(() => {
   vi.mocked(workspace.useWorkspace).mockReturnValue({ projects: [{ id: "project", name: "测试项目" }], papers: [], matrices: [] } as unknown as ReturnType<typeof workspace.useWorkspace>);
   vi.spyOn(HTMLElement.prototype, "scrollIntoView").mockImplementation(() => {});
   vi.spyOn(api, "listAiConversations").mockResolvedValue({ conversations: [conversation] });
+  vi.spyOn(api, "listAgentSkills").mockResolvedValue({ skills: [] });
   vi.spyOn(api, "getResearchThread").mockResolvedValue({ stats: { insights: 0, questions: 0 } } as unknown as api.ResearchThread);
   vi.spyOn(api, "listExperiments").mockResolvedValue({ experiments: [] });
   vi.spyOn(api, "getAiConversation").mockResolvedValue({ conversation, messages: [], actions: [] });
@@ -69,4 +70,28 @@ it("另一页面仍在运行时忙碌响应只刷新消息，不中断其回合"
   await render(); await act(async () => suggest().click());
   await act(async () => rejectTurn(new api.AgentTurnBusyError("上一回合仍在处理")));
   expect(api.getAiConversation).toHaveBeenLastCalledWith("project", "conversation", { healPending: false });
+});
+
+const availableSkill = { id: "builtin:evidence-check", name: "evidence-check", description: "核对证据", source: "builtin", enabled: true, version: "a".repeat(64), installedAt: null, fileCount: 1, warnings: [] } as api.AgentSkillSummary;
+
+it("指定技能随消息发送，运行中禁止更改技能或打开管理", async () => {
+  vi.mocked(api.listAgentSkills).mockResolvedValue({ skills: [availableSkill] });
+  await render();
+  const selector = document.querySelector<HTMLSelectElement>('select[aria-label="本回合研究技能"]')!;
+  await act(async () => { selector.value = availableSkill.id; selector.dispatchEvent(new Event("change", { bubbles: true })); });
+  await act(async () => suggest().click());
+  expect(vi.mocked(api.sendAiMessage).mock.calls[0][5]).toEqual({ skillIds: [availableSkill.id] });
+  expect(selector.disabled).toBe(true);
+  const manage = [...document.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.includes("管理技能"))!;
+  expect(manage.disabled).toBe(true);
+});
+
+it("重试沿用原回合的不使用技能选择，不随当前选择改变", async () => {
+  vi.mocked(api.listAgentSkills).mockResolvedValue({ skills: [availableSkill] });
+  vi.mocked(api.getAiConversation).mockResolvedValue({ conversation, messages: [{ ...user, skillSelection: [] }, failure], actions: [] });
+  await render();
+  const selector = document.querySelector<HTMLSelectElement>('select[aria-label="本回合研究技能"]')!;
+  await act(async () => { selector.value = availableSkill.id; selector.dispatchEvent(new Event("change", { bubbles: true })); });
+  await act(async () => (document.querySelector(".agent-failure button") as HTMLButtonElement).click());
+  expect(vi.mocked(api.sendAiMessage).mock.calls[0][5]).toEqual({ skillIds: [] });
 });

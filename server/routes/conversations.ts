@@ -4,8 +4,10 @@ import { z } from "zod";
 import { createDatabase } from "../db/client";
 import { projectExists } from "../db/projects";
 import { aiActions, aiConversations, aiMessages } from "../db/schema";
-import { AgentConfigurationError } from "../services/research-agent";
+import { AgentConfigurationError, type AgentTurnInput } from "../services/research-agent";
 import { disposePiAgentSession, runPiAgentTurn, type PiAgentStreamEvent } from "../services/pi-agent";
+import { AgentSkillError, getAvailableAgentSkills } from "../services/agent-skills";
+import type { AgentSkillSnapshot } from "../../shared/agent-skills";
 import type { AppEnv } from "../types";
 
 /** Canonical Research Agent mode (legacy aliases accepted on create). */
@@ -21,7 +23,13 @@ function parseJson<T>(value: string, fallback: T): T {
   }
 }
 function toMessage(row: typeof aiMessages.$inferSelect) {
-  return { ...row, error: row.error ? normalizeAgentTransportError(row.error) : "", citations: parseJson(row.citationsJson, []), citationsJson: undefined };
+  return {
+    ...row, error: row.error ? normalizeAgentTransportError(row.error) : "",
+    citations: parseJson(row.citationsJson, []), citationsJson: undefined,
+    skills: parseJson<AgentSkillSnapshot[]>(row.skillsJson, []).map(({ id, name, source, version, loadedAt }) => ({ id, name, source, version, loadedAt })),
+    skillSelection: parseJson<string[] | null>(row.skillSelectionJson, null),
+    skillsJson: undefined, skillSelectionJson: undefined,
+  };
 }
 function toAction(row: typeof aiActions.$inferSelect) {
   return {
@@ -127,10 +135,25 @@ conversationRoutes.get("/projects/:projectId/ai/conversations/:conversationId", 
   return c.json({ conversation, messages: messages.map(toMessage), actions: actions.map(toAction) });
 });
 
+conversationRoutes.get("/projects/:projectId/ai/conversations/:conversationId/messages/:messageId/skills/:skillId", async (c) => {
+  const row = await createDatabase(c.env).select().from(aiMessages).where(and(
+    eq(aiMessages.id, c.req.param("messageId")),
+    eq(aiMessages.projectId, c.req.param("projectId")),
+    eq(aiMessages.conversationId, c.req.param("conversationId")),
+    eq(aiMessages.role, "assistant"),
+  )).get();
+  const skill = row && parseJson<AgentSkillSnapshot[]>(row.skillsJson, []).find((item) => item.id === c.req.param("skillId"));
+  if (!skill) return c.json({ error: "SKILL_SNAPSHOT_NOT_FOUND", message: "没有找到本回合的技能快照。" }, 404);
+  return c.json({ skill });
+});
+
 conversationRoutes.post("/projects/:projectId/ai/conversations/:conversationId/messages", async (c) => {
   const projectId = c.req.param("projectId");
   const conversationId = c.req.param("conversationId");
-  const parsed = z.object({ content: z.string().trim().min(1).max(12_000) }).safeParse(await c.req.json().catch(() => null));
+  const parsed = z.object({
+    content: z.string().trim().min(1).max(12_000),
+    skillIds: z.array(z.string().min(1).max(160)).max(3).optional(),
+  }).safeParse(await c.req.json().catch(() => null));
   if (!parsed.success) return c.json({ error: "INVALID_MESSAGE", issues: parsed.error.issues }, 400);
   const db = createDatabase(c.env);
   const conversation = await db
@@ -146,6 +169,21 @@ conversationRoutes.post("/projects/:projectId/ai/conversations/:conversationId/m
   const turnController = new AbortController();
   activeTurns.set(conversationId, turnController);
   try {
+    let selectedSkillIds = parsed.data.skillIds ? [...new Set(parsed.data.skillIds)] : undefined;
+    let availableSkills = await getAvailableAgentSkills(c.env, selectedSkillIds);
+    let message = parsed.data.content;
+    if (message.startsWith("/skill:")) {
+      const command = /^\/skill:([a-z0-9]+(?:-[a-z0-9]+)*)(?:\s+([\s\S]*))?$/.exec(message);
+      const skill = command && availableSkills.find((item) => item.name === command[1]);
+      if (!skill) {
+        activeTurns.delete(conversationId);
+        return c.json({ error: "SKILL_NOT_AVAILABLE", message: "技能不存在、已停用或不在本轮选择中，请重新选择技能。" }, 400);
+      }
+      selectedSkillIds = [skill.id];
+      availableSkills = [skill];
+      message = command[2]?.trim() || "请按所选技能的工作流程，结合当前项目证据提供分析。";
+    }
+    const skillSelectionJson = JSON.stringify(selectedSkillIds ?? null);
 
     // Heal turns left pending when SSE was aborted (Vite proxy / API hot-reload).
     await db
@@ -169,6 +207,7 @@ conversationRoutes.post("/projects/:projectId/ai/conversations/:conversationId/m
         projectId,
         role: "user",
         content: parsed.data.content,
+        skillSelectionJson,
         citationsJson: "[]",
         model: null,
         status: "completed",
@@ -181,6 +220,7 @@ conversationRoutes.post("/projects/:projectId/ai/conversations/:conversationId/m
         projectId,
         role: "assistant",
         content: "",
+        skillSelectionJson,
         citationsJson: "[]",
         model: null,
         status: "pending",
@@ -191,11 +231,13 @@ conversationRoutes.post("/projects/:projectId/ai/conversations/:conversationId/m
     const title = conversation.title === "新研究对话" ? parsed.data.content.slice(0, 40) : conversation.title;
     await db.update(aiConversations).set({ title, updatedAt: now }).where(eq(aiConversations.id, conversationId));
 
-    const turn = {
+    const turn: AgentTurnInput = {
       projectId,
       conversationId,
       assistantMessageId: assistantId,
-      message: parsed.data.content,
+      message,
+      availableSkills,
+      selectedSkillIds,
       history: historyRows.reverse().map((row) => ({ role: row.role as "user" | "assistant", content: row.content })),
     };
 
@@ -211,6 +253,21 @@ conversationRoutes.post("/projects/:projectId/ai/conversations/:conversationId/m
     };
 
     const abortSignal = AbortSignal.any([c.req.raw.signal, turnController.signal, AbortSignal.timeout(300_000)]);
+    const loadedSkills = new Map<string, AgentSkillSnapshot>();
+    let skillWrites = Promise.resolve();
+    turn.onSkillLoaded = (skill) => {
+      abortSignal.throwIfAborted();
+      loadedSkills.set(skill.id, skill);
+      const skillsJson = JSON.stringify([...loadedSkills.values()]);
+      skillWrites = skillWrites.then(async () => {
+        abortSignal.throwIfAborted();
+        const saved = await db.update(aiMessages).set({ skillsJson })
+          .where(and(eq(aiMessages.id, assistantId), eq(aiMessages.status, "pending")))
+          .returning({ id: aiMessages.id });
+        if (saved.length !== 1) throw new Error("无法保存本回合技能快照，技能未加载，请重试。");
+      });
+      return skillWrites;
+    };
     const onAbort = () => {
       if (activeTurns.get(conversationId) === turnController) {
         disposePiAgentSession(conversationId);
@@ -297,6 +354,7 @@ conversationRoutes.post("/projects/:projectId/ai/conversations/:conversationId/m
     });
   } catch (error) {
     if (activeTurns.get(conversationId) === turnController) activeTurns.delete(conversationId);
+    if (error instanceof AgentSkillError) return c.json({ error: error.code, message: error.message }, error.status);
     throw error;
   }
 });

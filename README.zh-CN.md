@@ -71,7 +71,9 @@ ArguMesh(中文名「论脉」)是一个**本地优先、开源**的文献研究
 
 中断回合可直接重试：系统停止旧会话并从已保存的消息恢复上下文，保留失败消息与动作记录。长回合有心跳和 5 分钟超时；运行期间防止重复提交，结束会话或离开页面会取消请求，忙碌与超时提示使用中文。每轮最多执行一个白名单写入动作。
 
-**Skills 接入现状（2026-10-21 源码核验）**：Pi SDK 已具备 `SKILL.md` 发现与 `/skill:名称 参数` 手动展开已发现技能指令的能力，默认加载器也会扫描用户目录的 `.agents/skills`。当前尚无技能导入、选择、启停与版本追踪界面；Agent 未开放 `read`，SDK 不会向模型展示技能列表，自动选择与按需加载流程尚未打通。当前显式开放的领域工具不包含通用 Python / Shell 脚本执行或任意文件读写。详见[开发指南](docs/DEVELOPMENT.md#research-agent-与-skills-接入现状)；本次仅记录现状。
+**Skills（源码新增，尚未发布安装包）**：在 Research Agent 对话区选择「自动选择」「不使用技能」或某个已启用技能，通过技能管理入口查看、启停及安装技能。内置「项目证据梳理」「可验证的实验计划」「有来源的论文审查」三个科研工作流；也可导入本地 `SKILL.md` 或包含它的技能文件夹，预览后安装，用户安装的技能可卸载。技能在本机保存，所有项目共用，无需额外账号。
+
+技能资料读取限于自身技能包内的文本，不执行 Python / Shell 脚本或任意读写文件。每轮实际加载的技能保留来源、内容版本、加载时间和内容快照；停用、卸载或后续重新安装不会改写旧消息记录。领域写入仍只产生草稿，每轮最多一个。应用不再自动扫描本机 `.agents/skills`、`.pi/skills` 或加载 Pi 扩展；本地技能须从上述入口安装。安装格式、大小限制与迁移说明见[开发指南](docs/DEVELOPMENT.md#research-agent-与-skills-接入现状)。
 
 ### 文献库
 按 DOI / arXiv / URL 导入文献(自动获取元数据),或批量上传 PDF(单文件 ≤ 25 MB)。支持阅读状态(待读 → 粗读 → 精读 → 已复现 → 核心文献)、收藏、标签与项目内笔记。列表可多选后**批量删除**(与单行删除相同:确认后永久移除 PDF、证据与关联知识,跨项目一并清理)。
@@ -330,7 +332,7 @@ src-tauri/         # 可选的 Tauri 桌面壳 + Node sidecar
 | [`AGENTS.md`](AGENTS.md) | 面向所有编码 agent 的协作与开发规范 |
 | [`CLAUDE.md`](CLAUDE.md) | Claude Code 指引:命令、架构、不变量 |
 | [`PROJECT-SPEC`](docs/PROJECT-SPEC.md) | 项目定位、功能范围、明确不做什么 |
-| [`ARCHITECTURE`](docs/ARCHITECTURE.md) | 代码组织、29 张表、路由与服务、数据组织 |
+| [`ARCHITECTURE`](docs/ARCHITECTURE.md) | 代码组织、30 张表、路由与服务、数据组织 |
 | [`PAGE-STRUCTURE`](docs/PAGE-STRUCTURE.md) | 路由、旧链接兼容、各页面行为 |
 | [`COMPONENT-GUIDELINES`](docs/COMPONENT-GUIDELINES.md) | 共享组件、CSS token、无障碍 |
 | [`DEVELOPMENT`](docs/DEVELOPMENT.md) | 命令、环境变量、双轨迁移、测试布局 |

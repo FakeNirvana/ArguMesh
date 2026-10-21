@@ -74,7 +74,9 @@ The project home is a persistent **Research Agent** built on the [Pi](https://pi
 
 Interrupted turns can be retried: the old session is stopped and context is rebuilt from saved messages, retaining failed messages and action records. Long turns have keepalives and a five-minute timeout. Duplicate submissions are blocked while running; ending a conversation or leaving the page cancels its request. Busy and timeout errors use Chinese guidance, and each turn allows at most one whitelisted write action.
 
-**Skills integration status (source checked on 2026-10-21)** — The Pi SDK can discover `SKILL.md` files and expand a discovered skill's instructions through `/skill:name arguments`; its default loader also scans the user's `.agents/skills` directory. ArguMesh has no skill import, selection, enable/disable or version-tracking UI. With no `read` tool enabled, the SDK omits the skill catalog from the model's prompt, leaving automatic selection and on-demand loading incomplete. The explicitly enabled domain tools do not include general Python/Shell execution or arbitrary file access. See the [development guide](docs/DEVELOPMENT.md#research-agent-与-skills-接入现状). This documents existing behavior only.
+**Skills (new in source; installers not yet released)** — In the Research Agent composer, choose automatic selection, no skills, or a specific enabled skill. Open skill management to inspect, enable/disable and install skills. Three bundled research workflows cover project evidence review, verifiable experiment planning and evidence-grounded manuscript review. Import a local `SKILL.md` or a skill folder containing it, review the preview, then install; user-installed skills can be uninstalled. Skills are stored locally and shared across projects, without another account.
+
+Skills can read their packaged text resources, but cannot run Python/Shell scripts or access arbitrary files. Each skill actually loaded in a turn retains its source, content version, load time and content snapshot; disabling, uninstalling or reinstalling a skill does not rewrite previous message records. Domain writes remain drafts, with at most one per turn. ArguMesh no longer auto-discovers local `.agents/skills`, `.pi/skills` or Pi extensions: install local skills through the management entry. See the [development guide](docs/DEVELOPMENT.md#research-agent-与-skills-接入现状) for format, limits and migration details.
 
 ### Literature library
 Import papers by DOI / arXiv ID / URL with automatic metadata, or batch-upload PDFs (≤ 25 MB each). Track reading status (待读 → 粗读 → 精读 → 已复现 → 核心文献), favorites, tags, and per-project notes. Select multiple papers in the list to **batch-delete** them (same permanent delete as the per-row action: removes PDF, evidence, and linked knowledge across projects after confirm).
@@ -317,7 +319,7 @@ src-tauri/         # optional Tauri desktop shell + Node sidecar
 | [`AGENTS.md`](AGENTS.md) | Collaboration + coding rules for every agent (the cross-tool contract) |
 | [`CLAUDE.md`](CLAUDE.md) | Claude Code guidance: commands, architecture, invariants |
 | [`PROJECT-SPEC`](docs/PROJECT-SPEC.md) | Positioning, scope, what ArguMesh deliberately does *not* do |
-| [`ARCHITECTURE`](docs/ARCHITECTURE.md) | Code layout, 29 tables, routes/services, data organization |
+| [`ARCHITECTURE`](docs/ARCHITECTURE.md) | Code layout, 30 tables, routes/services, data organization |
 | [`PAGE-STRUCTURE`](docs/PAGE-STRUCTURE.md) | Routes, legacy-link compatibility, per-page behavior |
 | [`COMPONENT-GUIDELINES`](docs/COMPONENT-GUIDELINES.md) | Shared primitives, CSS tokens, accessibility |
 | [`DEVELOPMENT`](docs/DEVELOPMENT.md) | Commands, env vars, two-track migrations, test layout |
