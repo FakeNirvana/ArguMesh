@@ -452,7 +452,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
             arxivId: paper.arxivId ?? local?.arxivId,
             sourceUrl: paper.sourceUrl ?? local?.sourceUrl,
             fileHash: paper.fileHash ?? local?.fileHash,
-            fileName: paper.fileName ?? local?.fileName,
+            fileName: paper.fileName ?? local?.fileName ?? (paper.hasFile ? `${paper.id}.pdf` : undefined),
             fileSize: paper.fileSize ?? local?.fileSize,
             pageCount: paper.pageCount ?? local?.pageCount,
             outline: paper.outline?.length ? paper.outline : local?.outline,

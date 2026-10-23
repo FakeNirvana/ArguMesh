@@ -202,19 +202,20 @@ export async function uploadPaperFile(paperId: string, file: Blob, onProgress?: 
     const request = new XMLHttpRequest();
     request.open("PUT", `/api/papers/${encodeURIComponent(paperId)}/file`);
     request.setRequestHeader("content-type", "application/pdf");
+    if (file instanceof File) request.setRequestHeader("x-file-name", encodeURIComponent(file.name));
     request.upload.onprogress = (event) => onProgress?.(event.lengthComputable ? event.loaded / event.total : 0);
-    request.onerror = () => reject(new Error("PDF 云端上传失败"));
+    request.onerror = () => reject(new Error("PDF 保存到本地文献库失败，请重试"));
     request.onload = () => {
-      let payload: { paperId?: string; size?: number; error?: string; message?: string } = {};
+      let payload: { paperId?: string; size?: number; cloudStored?: boolean; error?: string; message?: string } = {};
       try { payload = JSON.parse(request.responseText) as typeof payload; } catch { /* handled below */ }
       if (request.status < 200 || request.status >= 300) return reject(new Error(payload.message ?? `PDF 上传失败 (${request.status})`));
-      resolve({ paperId: payload.paperId!, size: payload.size!, cloudStored: true });
+      resolve({ paperId: payload.paperId!, size: payload.size!, cloudStored: payload.cloudStored === true });
     };
     request.send(file);
   });
 }
 
-/** 从云端(Turso 内嵌 BLOB)下载论文 PDF,供本地 IndexedDB 未命中时回退。
+/** 从本地数据库下载论文 PDF，供当前浏览器的 IndexedDB 未命中时回退。
  *  404(论文没有 PDF)时返回 null,调用方静默降级;其它错误抛出。 */
 export async function downloadPaperFile(paperId: string): Promise<Blob | null> {
   const response = await fetch(`/api/papers/${encodeURIComponent(paperId)}/file`, {

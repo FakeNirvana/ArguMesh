@@ -36,13 +36,19 @@ beforeEach(() => {
   const host = document.createElement("div"); document.body.append(host); root = createRoot(host);
   vi.mocked(workspace.useWorkspace).mockReturnValue({
     projects: [{ id: "project", name: "Project" }], papers: [{ id: "paper", title: "Scanned paper", projectIds: ["project"], authors: "Author", year: 1958 }], readerAnswers: [], readerExcerpts: [], readerPositions: [], settings: {},
-    updatePaper: vi.fn(), setReaderPosition: vi.fn(),
+    updatePaper: vi.fn(), setReaderPosition: vi.fn(), setPaperFile: vi.fn(),
   } as unknown as ReturnType<typeof workspace.useWorkspace>);
   vi.mocked(storage.getPaperPdf).mockResolvedValue({ arrayBuffer: async () => new ArrayBuffer(4) } as Blob);
+  vi.spyOn(api, "downloadPaperFile").mockResolvedValue({ arrayBuffer: async () => new ArrayBuffer(4) } as Blob);
   vi.mocked(storage.getPageTranslations).mockResolvedValue(null);
   vi.mocked(storage.savePageTranslations).mockResolvedValue(undefined);
+  vi.mocked(storage.savePaperPdf).mockResolvedValue(undefined);
   vi.mocked(pdf.inspectPdf).mockResolvedValue({ title: "", authors: "", pageCount: 1, outline: [] });
+  vi.mocked(pdf.sha256File).mockResolvedValue("a".repeat(64));
   vi.mocked(pdf.currentPageText).mockResolvedValue({ text: "", source: "empty", layout: null });
+  vi.spyOn(api, "syncProject").mockResolvedValue({ id: "project" });
+  vi.spyOn(api, "syncPaper").mockResolvedValue({ paperId: "paper", duplicate: false });
+  vi.spyOn(api, "uploadPaperFile").mockResolvedValue({ paperId: "paper", size: 4, cloudStored: false });
   vi.spyOn(api, "parseReaderPage").mockRejectedValue(new Error("本机解析不可用"));
   vi.spyOn(api, "getReaderPageParseStatus").mockResolvedValue({ progress: null });
   vi.spyOn(api, "getAiModels").mockResolvedValue({ model: "step-5-preview", models: ["step-5-preview"], providers: [] });
@@ -274,4 +280,38 @@ it("对照编辑沿用已保存卡片的确认状态与 AI 来源信息", async 
   expect(document.querySelector(".ai-evidence-panel")?.textContent).toContain("原文证据摘录");
   await act(async () => document.querySelector<HTMLFormElement>(".paper-card-editor")!.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })));
   expect(state.updatePaper).toHaveBeenCalledWith("paper", expect.objectContaining({ card: expect.objectContaining({ ...card, updatedAt: expect.any(String) }) }));
+});
+
+async function uploadPdf(file: File) {
+  const input = document.querySelector<HTMLInputElement>('.reader-header input[type="file"]')!;
+  Object.defineProperty(input, "files", { value: [file], configurable: true });
+  await act(async () => input.dispatchEvent(new Event("change", { bubbles: true })));
+}
+
+it("PDF 写入文献库失败时显示错误，不将附件标记为已保存", async () => {
+  vi.mocked(api.uploadPaperFile).mockRejectedValue(new Error("PDF 写入文献库失败"));
+  const setPaperFile = workspace.useWorkspace().setPaperFile;
+  await render();
+  vi.mocked(storage.savePaperPdf).mockClear();
+  await uploadPdf(new File(["%PDF"], "论文.pdf", { type: "application/pdf" }));
+
+  expect(api.uploadPaperFile).toHaveBeenCalledWith("paper", expect.any(File));
+  expect(document.body.textContent).toContain("PDF 写入文献库失败");
+  expect(storage.savePaperPdf).not.toHaveBeenCalled();
+  expect(setPaperFile).not.toHaveBeenCalled();
+});
+
+it("PDF 写入文献库成功后才更新附件状态", async () => {
+  let finishUpload!: (result: Awaited<ReturnType<typeof api.uploadPaperFile>>) => void;
+  vi.mocked(api.uploadPaperFile).mockImplementation(() => new Promise((resolve) => { finishUpload = resolve; }));
+  const setPaperFile = workspace.useWorkspace().setPaperFile;
+  const file = new File(["%PDF"], "持久保存.pdf", { type: "application/pdf" });
+  await render();
+  await uploadPdf(file);
+  expect(api.uploadPaperFile).toHaveBeenCalledWith("paper", file);
+  expect(setPaperFile).not.toHaveBeenCalled();
+
+  await act(async () => finishUpload({ paperId: "paper", size: file.size, cloudStored: false }));
+  expect(setPaperFile).toHaveBeenCalledWith("paper", { name: file.name, size: file.size });
+  expect(document.body.textContent).not.toContain("PDF 写入文献库失败");
 });

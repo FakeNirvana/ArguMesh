@@ -3,7 +3,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, typ
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { ArrowLeft, ArrowsClockwise, BookOpenText, BookmarkSimple, Check, FilePdf, ListBullets, MagnifyingGlass, Minus, NotePencil, Plus, Quotes, Scan, Sparkle, Trash, Translate, UploadSimple, WarningCircle, X } from "@phosphor-icons/react";
 import { getDocument, type PDFDocumentProxy, type PDFPageProxy } from "pdfjs-dist";
-import { askReader, cancelReaderPageParse, downloadPaperFile, getAiConfig, getAiModels, getReaderPageParseStatus, parseReaderPage, syncPaper, syncProject, translateSelection, uploadPaperFile } from "../api";
+import { askReader, cancelReaderPageParse, getAiConfig, getAiModels, getReaderPageParseStatus, parseReaderPage, syncPaper, syncProject, translateSelection, uploadPaperFile } from "../api";
 import type { ParsedPage } from "../../server/services/mineru";
 import type { SelectionPayload } from "../components/PdfPage";
 import { ContinuousPage, ContinuousPdfPage } from "../components/ContinuousPage";
@@ -16,6 +16,7 @@ import { pickBubbleAnchor, type PageRect } from "../pdf/selection";
 import { getPageTranslations, getPaperPageTexts, getPaperPdf, savePageTranslations, savePaperPdf } from "../storage/paperFiles";
 import { useWorkspace } from "../state/workspace";
 import { currentPageText, extractPdfText, inspectPdf, recognizePdfPage, sha256File } from "../pdf/document";
+import { resolvePaperPdf } from "../pdf/resolvePaperPdf";
 import { structuredCompareBlocks, textCompareBlocks, type CompareBlock } from "../pdf/translation";
 import { translatePageBlocks } from "../pdf/translatePage";
 
@@ -240,14 +241,7 @@ export function ReaderPage() {
     setLoading(true);
     async function resolvePdf() {
       try {
-        let blob = await getPaperPdf(paperId);
-        if (!blob) {
-          // 本地 IndexedDB 未命中 → 回退云端(Turso 内嵌 PDF);拉到后缓存到本地,下次秒开。
-          blob = await downloadPaperFile(paperId);
-          if (blob) {
-            await savePaperPdf(paperId, new File([blob], `${paperId}.pdf`, { type: "application/pdf" }));
-          }
-        }
+        const blob = await resolvePaperPdf(paperId);
         if (cancelled) return;
         if (blob) await loadBlob(blob);
         else setLoading(false);
@@ -427,20 +421,17 @@ export function ReaderPage() {
     if (file.size > MAX_FILE_SIZE) { setError("PDF 不能超过 25 MB"); return; }
     cancelDocumentTranslation();
     try {
-      await savePaperPdf(paperId, file);
-      setPaperFile(paperId, { name: file.name, size: file.size });
       const metadata = await inspectPdf(file);
       const hash = await sha256File(file);
-      updatePaper(paperId, { fileHash: hash, pageCount: metadata.pageCount, outline: metadata.outline, authors: metadata.authors || paper?.authors });
       if (project && paper) {
         await syncProject(project);
         await syncPaper(project.id, { ...paper, fileHash: hash });
-        try {
-          await uploadPaperFile(paperId, file);
-        } catch {
-          // 云端(Turso)上传失败不阻塞本地阅读;PDF 已在 IndexedDB,可稍后重传。
-        }
+        await uploadPaperFile(paperId, file);
       }
+      // PDF 已入库；浏览器缓存不可用不影响持久化结果。
+      await savePaperPdf(paperId, file).catch(() => {});
+      setPaperFile(paperId, { name: file.name, size: file.size });
+      updatePaper(paperId, { fileHash: hash, pageCount: metadata.pageCount, outline: metadata.outline, authors: metadata.authors || paper?.authors });
       await loadBlob(file);
     } catch (uploadError) {
       setError(uploadError instanceof Error ? uploadError.message : "PDF 保存失败");

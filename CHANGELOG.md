@@ -8,6 +8,11 @@ ArguMesh（论脉）的版本历史。README 只保留指向本文件的入口�
 
 ---
 
+## Unreleased (2026-10-23) — PDF persistence across restarts
+
+- Save uploaded PDF filenames with their contents in the local database. Restore the Read action for existing database PDFs that have no filename when browser storage is empty after a desktop restart or update. Reader uploads now report database failures before marking an attachment saved. No database migration; no new installer release.
+- 修复桌面版重启或更新后文献重新显示「上传 PDF」的问题：文件名随 PDF 本体持久化，浏览器缓存为空时也为数据库中已有的 PDF 恢复「阅读」入口；阅读器上传入库失败会明确报错。无需数据库迁移，已入库附件无需重新导入；仅存于旧浏览器缓存、从未入库的文件仍需重新选择一次。尚未发布新安装包。
+
 ## Unreleased (2026-10-21) — Skill management in the sidebar
 
 - Moved **管理技能** from the Research Agent composer to the left sidebar. It opens the existing management dialog for skills shared across projects; the composer retains automatic, no-skill and specific-skill selection. No database migration or new installer release.

@@ -93,18 +93,23 @@ export function LibraryPage() {
       window.alert("请选择不超过 25 MB 的 PDF 文件。");
       return;
     }
-    await savePaperPdf(paperId, file);
-    const metadata = await inspectPdf(file);
-    const hash = await sha256File(file);
-    setPaperFile(paperId, { name: file.name, size: file.size });
-    updatePaper(paperId, { fileHash: hash, pageCount: metadata.pageCount, outline: metadata.outline, authors: metadata.authors || papers.find((item) => item.id === paperId)?.authors });
-    const paper = papers.find((item) => item.id === paperId);
-    if (paper) {
-      await syncProject(currentProject);
-      await syncPaper(currentProjectId, { ...paper, fileHash: hash });
-      await uploadPaperFile(paperId, file);
+    try {
+      const metadata = await inspectPdf(file);
+      const hash = await sha256File(file);
+      const paper = papers.find((item) => item.id === paperId);
+      if (paper) {
+        await syncProject(currentProject);
+        await syncPaper(currentProjectId, { ...paper, fileHash: hash });
+        await uploadPaperFile(paperId, file);
+      }
+      // PDF 已入库；浏览器缓存不可用不影响持久化结果。
+      await savePaperPdf(paperId, file).catch(() => {});
+      setPaperFile(paperId, { name: file.name, size: file.size });
+      updatePaper(paperId, { fileHash: hash, pageCount: metadata.pageCount, outline: metadata.outline, authors: metadata.authors || paper?.authors });
+      navigate(`/projects/${encodeURIComponent(currentProjectId)}/library/${encodeURIComponent(paperId)}/read`);
+    } catch (error) {
+      window.alert(error instanceof Error ? error.message : "PDF 保存到本地文献库失败，请重试");
     }
-    navigate(`/projects/${encodeURIComponent(currentProjectId)}/library/${encodeURIComponent(paperId)}/read`);
   }
 
   async function processUpload(item: UploadItem) {
@@ -114,14 +119,15 @@ export function LibraryPage() {
       update({ status: "reading", message: "读取元数据与文件指纹" });
       const [metadata, hash] = await Promise.all([inspectPdf(file), sha256File(file)]);
       const title = metadata.title || file.name.replace(/\.pdf$/i, "").trim() || "未命名文献";
-      const paperId = addPaper({ title, authors: metadata.authors, venue: "本地 PDF", year: new Date().getFullYear(), projectIds: [currentProjectId], fileHash: hash, fileName: file.name, fileSize: file.size, pageCount: metadata.pageCount, outline: metadata.outline });
-      update({ paperId, status: "uploading", progress: .1, message: "本地已保存，正在写入文献库" });
-      await savePaperPdf(paperId, file);
-      setPaperFile(paperId, { name: file.name, size: file.size });
+      const paperId = addPaper({ title, authors: metadata.authors, venue: "本地 PDF", year: new Date().getFullYear(), projectIds: [currentProjectId], fileHash: hash, pageCount: metadata.pageCount, outline: metadata.outline });
+      update({ paperId, status: "uploading", progress: .1, message: "正在写入本地文献库" });
       await syncProject(currentProject);
       const storedPaper = { id: paperId, title, authors: metadata.authors, venue: "本地 PDF", year: new Date().getFullYear(), fileHash: hash };
       const synced = await syncPaper(currentProjectId, storedPaper);
       const upload = await uploadPaperFile(synced.paperId, file, (progress) => update({ progress: .1 + progress * .9 }));
+      // PDF 已入库；浏览器缓存不可用不影响持久化结果。
+      await savePaperPdf(paperId, file).catch(() => {});
+      setPaperFile(paperId, { name: file.name, size: file.size });
       // `cloudStored:false` = PDF 已写入本地 SQLite 库(本项目没有云端副本),如实告知落点。
       const localOnlyMessage = upload.cloudStored ? "上传完成" : "已保存到本地文献库";
       update({ paperId, status: "done", progress: 1, message: synced.duplicate ? "已去重并关联到当前项目" : localOnlyMessage });

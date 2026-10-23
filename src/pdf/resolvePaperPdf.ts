@@ -1,12 +1,11 @@
 import { downloadPaperFile } from "../api";
 import { getPaperPdf, savePaperPdf } from "../storage/paperFiles";
 
-/** IndexedDB 未命中时从服务端 paper_files 拉取 PDF，并缓存到本地。 */
+/** 本地数据库为准；浏览器副本仅用于兼容尚未入库的旧附件。 */
 export async function resolvePaperPdf(paperId: string, fileName?: string): Promise<Blob | null> {
-  const cached = await getPaperPdf(paperId);
-  if (cached) return cached;
-  const remote = await downloadPaperFile(paperId);
-  if (!remote) return null;
-  await savePaperPdf(paperId, new File([remote], fileName ?? `${paperId}.pdf`, { type: "application/pdf" }));
-  return remote;
+  const stored = await downloadPaperFile(paperId);
+  if (!stored) return getPaperPdf(paperId).catch(() => null);
+  // 更换 PDF 后缓存可能仍是旧版本，缓存失败也必须使用数据库中的原件。
+  await savePaperPdf(paperId, new File([stored], fileName ?? `${paperId}.pdf`, { type: "application/pdf" })).catch(() => {});
+  return stored;
 }
