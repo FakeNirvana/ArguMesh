@@ -294,10 +294,14 @@ export function ReaderPage() {
     const original = stageRef.current;
     const translated = readerTab === "compare" ? compareStageRef.current : null;
     if (!original || (readerTab === "compare" && !translated)) return;
+    let fittedWidth = 0;
     const fit = () => {
-      const width = pageSize.width;
       const available = translated ? Math.min(original.clientWidth, translated.clientWidth) - 36 : original.clientWidth - 32;
-      if (available > 0) resizePages(Math.max(readerTab === "card" ? .3 : .7, Math.min(2.2, available / width)));
+      // Status wrapping and horizontal scrollbars must not undo the user's zoom.
+      if (available > 0 && available !== fittedWidth) {
+        fittedWidth = available;
+        resizePages(Math.max(.2, Math.min(2.2, available / pageSize.width)));
+      }
     };
     fit();
     const observer = new ResizeObserver(fit);
@@ -328,13 +332,13 @@ export function ReaderPage() {
     const original = stageRef.current;
     const translated = compareStageRef.current;
     if (!original) return;
-    const expected = new WeakMap<HTMLElement, number>();
+    const expected = new WeakMap<HTMLElement, { top: number; left: number }>();
     const scroll = (source: HTMLDivElement, target: HTMLDivElement | null) => {
       if (restoredDocumentRef.current !== document) return;
       const pending = expected.get(source);
       if (pending !== undefined) {
         expected.delete(source);
-        if (Math.abs(source.scrollTop - pending) < 2) return;
+        if (Math.abs(source.scrollTop - pending.top) < 2 && Math.abs(source.scrollLeft - pending.left) < 2) return;
       }
       const position = readPageScroll(source);
       scrollPositionsRef.current.set(source, position);
@@ -343,8 +347,12 @@ export function ReaderPage() {
       if (readerTab !== "compare" || !linkedScroll || !target) return;
       scrollPositionsRef.current.set(target, position);
       const top = Math.min(pageScrollTop(target, position), Math.max(0, target.scrollHeight - target.clientHeight));
-      expected.set(target, top);
+      const sourceRange = Math.max(0, source.scrollWidth - source.clientWidth);
+      const targetRange = Math.max(0, target.scrollWidth - target.clientWidth);
+      const left = sourceRange ? Math.max(0, Math.min(1, source.scrollLeft / sourceRange)) * targetRange : 0;
+      expected.set(target, { top, left });
       target.scrollTop = top;
+      target.scrollLeft = left;
     };
     const fromOriginal = () => scroll(original, translated);
     const fromTranslated = () => { if (translated) scroll(translated, original); };
@@ -360,7 +368,7 @@ export function ReaderPage() {
         const anchor = scrollPositionsRef.current.get(stage);
         if (!anchor) continue;
         const top = Math.min(pageScrollTop(stage, anchor), Math.max(0, stage.scrollHeight - stage.clientHeight));
-        if (Math.abs(stage.scrollTop - top) > 1) { expected.set(stage, top); stage.scrollTop = top; }
+        if (Math.abs(stage.scrollTop - top) > 1) { expected.set(stage, { top, left: stage.scrollLeft }); stage.scrollTop = top; }
       }
     });
     for (const stage of [original, translated]) stage?.querySelectorAll("[data-reader-page]").forEach((page) => observer.observe(page));
@@ -819,19 +827,40 @@ export function ReaderPage() {
 
   return <div className="reader-page" data-reader-mode={readerTab}>
     <header className="reader-header"><div className="reader-title"><button className="icon-button" onClick={() => navigate(libraryPath)} aria-label="返回项目文献库"><ArrowLeft /></button><FilePdf weight="duotone" /><div><span className="eyebrow">{project?.name}</span><h1>{paper.title}</h1><small>{paper.authors} · {paper.venue} {paper.year}</small></div></div><label className="secondary-button upload-button"><UploadSimple />{document ? "更换 PDF" : "上传 PDF"}<input type="file" accept="application/pdf,.pdf" onChange={(event) => void upload(event)} /></label></header>
+    <div className="reader-controls">
+      <div className="reader-toolbar"><div className="outline-control"><button className="icon-button" disabled={!paper.outline?.length} onClick={() => setOutlineOpen((value) => !value)} aria-label="文档目录"><ListBullets /></button>{outlineOpen && paper.outline?.length ? <nav className="reader-outline" aria-label="PDF 目录">{paper.outline.map((item, index) => <button key={`${item.page}-${index}`} onClick={() => { jumpToPage(item.page); setOutlineOpen(false); }}><span>{item.title}</span><small>{item.page}</small></button>)}</nav> : null}<label title="向下滚动连续阅读，也可输入页码跳转"><input aria-label="当前页码" type="number" min={1} max={document?.numPages ?? 1} value={pageNumber} onChange={(event) => jumpToPage(Number(event.target.value) || 1)} /> / {document?.numPages ?? 0}</label></div><form className="reader-search" onSubmit={(event) => void searchDocument(event)}><MagnifyingGlass /><input value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} placeholder="全文搜索" /><button disabled={!document || searchQuery.trim().length < 2 || searching}>{searching ? "搜索中" : "搜索"}</button>{searchResults.length ? <div className="search-results">{searchResults.map((result) => <button type="button" key={`${result.page}-${result.excerpt}`} onClick={() => { jumpToPage(result.page); setSearchResults([]); }}><strong>第 {result.page} 页</strong><span>{result.excerpt}</span></button>)}</div> : null}</form><button className="secondary-button ocr-button" disabled={!pdfPage || pdfPage.pageNumber !== pageNumber || ocrProgress !== null} onClick={() => void runOcr()}><Scan />{ocrLabel}</button>{ocrProgress !== null ? <button type="button" className="secondary-button" onClick={() => ocrRunRef.current?.abort()}>取消 OCR</button> : null}<div><button className="icon-button" aria-label="缩小页面" onClick={() => resizePages(Math.max(.2, scale - .15))}><Minus /></button><span>{Math.round(scale * 100)}%</span><button className="icon-button" aria-label="放大页面" onClick={() => resizePages(Math.min(2.2, scale + .15))}><Plus /></button></div>
+          {readerTab === "compare" ? <div className="reader-translation-actions" role="group" aria-label="翻译操作">
+            {pageTranslationActive ? <button type="button" className="secondary-button" onClick={() => pageRunRef.current?.abort()}><X />取消本页翻译</button>
+              : <button type="button" className="secondary-button" disabled={compareContextRef.current?.page !== pageNumber || compareLoading || !compareTotal || comparePhase === "working" || Boolean(documentRunRef.current) || ocrProgress !== null} onClick={() => void translateCurrentPage()}><Translate />{compareDone === compareTotal && compareTotal ? "本页已翻译" : "翻译本页"}</button>}
+            {documentJob?.stage === "parsing" || documentJob?.stage === "translating"
+              ? <button type="button" className="secondary-button" onClick={cancelDocumentTranslation}><X />取消全文翻译</button>
+              : documentJob?.stage === "cancelling"
+                ? <button type="button" className="secondary-button" disabled><X />正在取消…</button>
+                : <button type="button" className="primary" disabled={!document || pageTranslationActive || comparePhase === "working" || documentJob?.stage === "done"} onClick={() => void translateWholeDocument()}><Translate />{documentJob?.stage === "done" ? "全文已翻译" : documentJob?.stage === "error" || documentJob?.stage === "cancelled" ? "继续翻译全文" : "精确解析并翻译全文"}</button>}
+            <label className="compare-scroll-toggle"><input type="checkbox" checked={linkedScroll} onChange={(event) => setLinkedScroll(event.target.checked)} />双屏关联</label>
+          </div> : null}
+          <div className="reader-tabs" role="tablist" aria-label="右栏视图">
+          <button id="reader-notes-tab" type="button" role="tab" className="reader-tab" aria-controls="reader-notes-panel" aria-selected={readerTab === "notes"} onClick={() => setReaderTab("notes")}><NotePencil />批注与问答</button>
+          <button id="reader-compare-tab" type="button" role="tab" className="reader-tab" aria-controls="reader-compare-panel" aria-selected={readerTab === "compare"} onClick={() => setReaderTab("compare")}><Translate />双语对照</button>
+          <button id="reader-card-tab" type="button" role="tab" className="reader-tab" aria-controls="reader-card-panel" aria-selected={readerTab === "card"} onClick={() => setReaderTab("card")}><BookOpenText />Paper Card</button>
+        </div>
+        </div>
+      {readerTab === "compare" ? <div className="reader-translation-status">
+            <span className="compare-progress" role="status" aria-live="polite">{documentJob
+              ? `全文 ${documentJob.totalPages} 页 · 已完成 ${documentJob.completedPages} 页 · ${documentJob.stage === "parsing" ? `${parserProgress?.stage === "downloading" ? `首次准备：下载解析模型 ${parserProgress.completed}/${parserProgress.total} 组` : parserProgress?.stage === "starting" ? "正在检查本机解析模型…" : parserProgress?.stage === "queued" ? "等待本机解析任务…" : `正在解析第 ${documentJob.page} 页`}` : documentJob.stage === "translating" ? `正在翻译第 ${documentJob.page} 页 ${documentJob.completedBlocks}/${documentJob.totalBlocks} 项` : documentJob.stage === "done" ? "全部完成" : documentJob.stage === "cancelling" ? "正在取消" : documentJob.stage === "cancelled" ? "已取消" : "已暂停"} · 模型 ${documentJob.model}`
+              : `当前第 ${pageNumber} / ${document?.numPages ?? 0} 页 · 已完成 ${compareDone} / ${compareTotal} 项`}</span>
+            {!documentJob ? <small className="compare-progress">首次使用需联网下载解析模型，之后在本机复用。</small> : null}
+            {documentJob?.notice ? <span className="compare-notice-text" role="status">{documentJob.notice}</span> : null}
+            {documentJob?.error || compareError || error ? <span className="compare-error-text" role="alert">{compareError || error || documentJob?.error}</span> : null}
+      </div> : null}
+    </div>
     <div className="reader-layout" data-reader-mode={readerTab}>
       <section className="reader-document">
-        <div className="reader-toolbar"><div className="outline-control"><button className="icon-button" disabled={!paper.outline?.length} onClick={() => setOutlineOpen((value) => !value)} aria-label="文档目录"><ListBullets /></button>{outlineOpen && paper.outline?.length ? <nav className="reader-outline" aria-label="PDF 目录">{paper.outline.map((item, index) => <button key={`${item.page}-${index}`} onClick={() => { jumpToPage(item.page); setOutlineOpen(false); }}><span>{item.title}</span><small>{item.page}</small></button>)}</nav> : null}<label title="向下滚动连续阅读，也可输入页码跳转"><input aria-label="当前页码" type="number" min={1} max={document?.numPages ?? 1} value={pageNumber} onChange={(event) => jumpToPage(Number(event.target.value) || 1)} /> / {document?.numPages ?? 0}</label></div><form className="reader-search" onSubmit={(event) => void searchDocument(event)}><MagnifyingGlass /><input value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} placeholder="全文搜索" /><button disabled={!document || searchQuery.trim().length < 2 || searching}>{searching ? "搜索中" : "搜索"}</button>{searchResults.length ? <div className="search-results">{searchResults.map((result) => <button type="button" key={`${result.page}-${result.excerpt}`} onClick={() => { jumpToPage(result.page); setSearchResults([]); }}><strong>第 {result.page} 页</strong><span>{result.excerpt}</span></button>)}</div> : null}</form><button className="secondary-button ocr-button" disabled={!pdfPage || pdfPage.pageNumber !== pageNumber || ocrProgress !== null} onClick={() => void runOcr()}><Scan />{ocrLabel}</button>{ocrProgress !== null ? <button type="button" className="secondary-button" onClick={() => ocrRunRef.current?.abort()}>取消 OCR</button> : null}<div><button className="icon-button" onClick={() => resizePages(Math.max(.7, scale - .15))}><Minus /></button><span>{Math.round(scale * 100)}%</span><button className="icon-button" onClick={() => resizePages(Math.min(2.2, scale + .15))}><Plus /></button></div></div>
         <div className="pdf-stage" ref={stageRef}>{loading && !document ? <LoadingState title="正在加载 PDF" /> : null}{!loading && error && !document ? <EmptyState icon={<WarningCircle />} title="无法打开 PDF" description={error} action={<label className="primary upload-button"><UploadSimple />重新选择<input type="file" accept="application/pdf,.pdf" onChange={(event) => void upload(event)} /></label>} /> : null}{!loading && !document ? <EmptyState icon={<FilePdf />} title="上传 PDF 开始阅读" action={<label className="primary upload-button"><UploadSimple />选择 PDF<input type="file" accept="application/pdf,.pdf" onChange={(event) => void upload(event)} /></label>} /> : null}{document ? Array.from({ length: document.numPages }, (_, index) => index + 1).map((page) => <ContinuousPage key={page} page={page} activePage={pageNumber} width={pageSize.width * scale} height={pageSize.height * scale} scale={scale} stage={stageRef}>
           {(visible) => <ContinuousPdfPage document={document} pageNumber={page} activePage={pdfPage?.pageNumber === page ? pdfPage : undefined} visible={visible} scale={scale} onSelect={(payload) => handleSelect(payload, page)} highlights={excerpts.filter((item) => item.page === page && item.rects?.length).map((item) => ({ id: item.id, rects: item.rects!, note: item.note, kind: item.kind }))} onHighlightClick={openAnchoredExcerpt} />}
         </ContinuousPage>) : null}</div>
       </section>
       <aside className="reader-ai">
-        <div className="reader-tabs" role="tablist" aria-label="右栏视图">
-          <button id="reader-notes-tab" type="button" role="tab" className="reader-tab" aria-controls="reader-notes-panel" aria-selected={readerTab === "notes"} onClick={() => setReaderTab("notes")}><NotePencil />批注与问答</button>
-          <button id="reader-compare-tab" type="button" role="tab" className="reader-tab" aria-controls="reader-compare-panel" aria-selected={readerTab === "compare"} onClick={() => setReaderTab("compare")}><Translate />双语对照</button>
-          <button id="reader-card-tab" type="button" role="tab" className="reader-tab" aria-controls="reader-card-panel" aria-selected={readerTab === "card"} onClick={() => setReaderTab("card")}><BookOpenText />Paper Card</button>
-        </div>
         {/* 用 CSS 隐藏而不是卸载:切走再切回时,写了一半的问题和摘录备注不该丢。 */}
         <div id="reader-notes-panel" role="tabpanel" aria-labelledby="reader-notes-tab" className="reader-notes" data-active={readerTab === "notes"}>
         <div className="reader-ai-intro"><Sparkle weight="duotone" /><div><strong>问 AI</strong><span>选中文字则基于选区回答；不选中则基于全文回答</span></div></div>
@@ -844,22 +873,6 @@ export function ReaderPage() {
           <PaperCardEditor key={paperId} />
         </div>
         {readerTab === "compare" ? <section id="reader-compare-panel" role="tabpanel" aria-labelledby="reader-compare-tab" className="compare-pane" aria-label="双语对照">
-          <div className="compare-toolbar">
-            {pageTranslationActive ? <button type="button" className="secondary-button" onClick={() => pageRunRef.current?.abort()}><X />取消本页翻译</button>
-              : <button type="button" className="secondary-button" disabled={compareContextRef.current?.page !== pageNumber || compareLoading || !compareTotal || comparePhase === "working" || Boolean(documentRunRef.current) || ocrProgress !== null} onClick={() => void translateCurrentPage()}><Translate />{compareDone === compareTotal && compareTotal ? "本页已翻译" : "翻译本页"}</button>}
-            {documentJob?.stage === "parsing" || documentJob?.stage === "translating"
-              ? <button type="button" className="secondary-button" onClick={cancelDocumentTranslation}><X />取消全文翻译</button>
-              : documentJob?.stage === "cancelling"
-                ? <button type="button" className="secondary-button" disabled><X />正在取消…</button>
-                : <button type="button" className="primary" disabled={!document || pageTranslationActive || comparePhase === "working" || documentJob?.stage === "done"} onClick={() => void translateWholeDocument()}><Translate />{documentJob?.stage === "done" ? "全文已翻译" : documentJob?.stage === "error" || documentJob?.stage === "cancelled" ? "继续翻译全文" : "精确解析并翻译全文"}</button>}
-            <span className="compare-progress" role="status" aria-live="polite">{documentJob
-              ? `全文 ${documentJob.totalPages} 页 · 已完成 ${documentJob.completedPages} 页 · ${documentJob.stage === "parsing" ? `${parserProgress?.stage === "downloading" ? `首次准备：下载解析模型 ${parserProgress.completed}/${parserProgress.total} 组` : parserProgress?.stage === "starting" ? "正在检查本机解析模型…" : parserProgress?.stage === "queued" ? "等待本机解析任务…" : `正在解析第 ${documentJob.page} 页`}` : documentJob.stage === "translating" ? `正在翻译第 ${documentJob.page} 页 ${documentJob.completedBlocks}/${documentJob.totalBlocks} 项` : documentJob.stage === "done" ? "全部完成" : documentJob.stage === "cancelling" ? "正在取消" : documentJob.stage === "cancelled" ? "已取消" : "已暂停"} · 模型 ${documentJob.model}`
-              : `当前第 ${pageNumber} / ${document?.numPages ?? 0} 页 · 已完成 ${compareDone} / ${compareTotal} 项`}</span>
-            {!documentJob ? <small className="compare-progress">首次使用需联网下载解析模型，之后在本机复用。</small> : null}
-            {documentJob?.notice ? <span className="compare-notice-text" role="status">{documentJob.notice}</span> : null}
-            {documentJob?.error || compareError || error ? <span className="compare-error-text" role="alert">{compareError || error || documentJob?.error}</span> : null}
-            <label className="compare-scroll-toggle"><input type="checkbox" checked={linkedScroll} onChange={(event) => setLinkedScroll(event.target.checked)} />双屏关联</label>
-          </div>
           <div className="compare-page-stage" ref={compareStageRef}>
             {document ? Array.from({ length: document.numPages }, (_, index) => index + 1).map((page) => <ContinuousPage key={page} page={page} activePage={pageNumber} width={pageSize.width * scale} height={pageSize.height * scale} scale={scale} stage={compareStageRef}>
               {(visible) => <ContinuousTranslationPage document={document} paperId={paperId} pageNumber={page} visible={visible} width={pageSize.width * scale} height={pageSize.height * scale} scale={scale} revision={`${ocrNonce}:${documentRefreshNonce}`} active={page === pageNumber && !compareLoading && compareContextRef.current?.page === page ? { blocks: compareBlocks, columns: compareColumns, language: compareLanguage, parser: compareParser, source: compareSource } : undefined} onAnnotate={annotateCompareBlock} onRetry={page === pageNumber ? (index) => void retryCompareBlock(index) : undefined} empty={page === pageNumber ? <EmptyState icon={<Scan />} title="这一页没有可翻译的文字" description="扫描版 PDF 请先 OCR 本页，再点击“翻译本页”。英文识别资源已内置，识别在本机完成。" action={<button type="button" className="primary" disabled={!pdfPage || pdfPage.pageNumber !== pageNumber || ocrProgress !== null} onClick={() => void runOcr()}><Scan />{ocrLabel}</button>} /> : undefined} />}

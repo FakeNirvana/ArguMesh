@@ -144,7 +144,7 @@ it("本页翻译失败不会使页签或重试入口失效", async () => {
   expect(document.querySelector(".reader-page")?.getAttribute("data-reader-mode")).toBe("notes");
 });
 
-it("下滑连续页面更新当前页并关联译文，关闭关联后译文滚动独立且不调用 AI", async () => {
+it("连续页面双向关联纵向位置与横向比例，关闭关联后独立滚动且不调用 AI", async () => {
   fake.document.numPages = 3;
   fake.document.getPage.mockImplementation(async (number: number) => ({ ...fake.page, pageNumber: number }));
   vi.mocked(pdf.currentPageText).mockResolvedValue(current);
@@ -161,16 +161,24 @@ it("下滑连续页面更新当前页并关联译文，关闭关联后译文滚�
       node.getBoundingClientRect = () => ({ top: (Number(node.dataset.readerPage) - 1) * 1000 - stage.scrollTop, height: 976 }) as DOMRect;
     }
   }
-  await act(async () => { original.scrollTop = 1050; original.dispatchEvent(new Event("scroll")); });
+  Object.defineProperty(original, "clientWidth", { value: 500 });
+  Object.defineProperty(original, "scrollWidth", { value: 1000 });
+  Object.defineProperty(translated, "clientWidth", { value: 400 });
+  Object.defineProperty(translated, "scrollWidth", { value: 1400 });
+  await act(async () => { original.scrollTop = 1050; original.scrollLeft = 250; original.dispatchEvent(new Event("scroll")); });
   expect(document.querySelector<HTMLInputElement>('[aria-label="当前页码"]')?.value).toBe("2");
   expect(translated.scrollTop).toBe(1050);
+  expect(translated.scrollLeft).toBe(500);
   expect(original.scrollTop).toBe(1050); // changing active page does not reset the viewport
-  await act(async () => { translated.scrollTop = 2050; translated.dispatchEvent(new Event("scroll")); });
+  expect(original.scrollLeft).toBe(250);
+  await act(async () => { translated.scrollTop = 2050; translated.scrollLeft = 750; translated.dispatchEvent(new Event("scroll")); });
   expect(original.scrollTop).toBe(2050);
+  expect(original.scrollLeft).toBe(375);
   expect(document.querySelector<HTMLInputElement>('[aria-label="当前页码"]')?.value).toBe("3");
   await act(async () => document.querySelector<HTMLInputElement>(".compare-scroll-toggle input")!.click());
-  await act(async () => { translated.scrollTop = 50; translated.dispatchEvent(new Event("scroll")); });
+  await act(async () => { translated.scrollTop = 50; translated.scrollLeft = 50; translated.dispatchEvent(new Event("scroll")); });
   expect(original.scrollTop).toBe(2050);
+  expect(original.scrollLeft).toBe(375);
   expect(document.querySelector<HTMLInputElement>('[aria-label="当前页码"]')?.value).toBe("3");
   expect(api.translateSelection).not.toHaveBeenCalled();
   expect(vi.mocked(api.parseReaderPage).mock.calls.every((call) => call[2] === true)).toBe(true);
@@ -314,4 +322,81 @@ it("PDF 写入文献库成功后才更新附件状态", async () => {
   await act(async () => finishUpload({ paperId: "paper", size: file.size, cloudStored: false }));
   expect(setPaperFile).toHaveBeenCalledWith("paper", { name: file.name, size: file.size });
   expect(document.body.textContent).not.toContain("PDF 写入文献库失败");
+});
+
+it("翻译操作与状态集中在公共工具区，切换右栏不触发 AI", async () => {
+  await render();
+  const controls = document.querySelector<HTMLElement>(".reader-controls");
+  const actions = document.querySelector<HTMLElement>('[role="group"][aria-label="翻译操作"]');
+  const status = document.querySelector<HTMLElement>(".reader-translation-status");
+  expect(controls).not.toBeNull();
+  expect(actions).not.toBeNull();
+  expect(controls?.contains(actions)).toBe(true);
+  expect(controls?.contains(button("翻译本页"))).toBe(true);
+  expect(controls?.contains(button("精确解析并翻译全文"))).toBe(true);
+  expect(controls?.contains(document.querySelector(".reader-tabs"))).toBe(true);
+  expect(controls?.contains(status)).toBe(true);
+  expect(status?.textContent).toContain("当前第 1 / 1 页");
+  expect(document.querySelector(".compare-pane .reader-translation-actions, .compare-pane .compare-progress, .compare-pane .compare-scroll-toggle")).toBeNull();
+  expect(document.querySelector(".reader-document .reader-toolbar, .reader-ai .reader-tabs")).toBeNull();
+
+  for (const [label, mode] of [["批注与问答", "notes"], ["Paper Card", "card"], ["双语对照", "compare"]]) {
+    await act(async () => button(label).click());
+    expect(document.querySelector(".reader-page")?.getAttribute("data-reader-mode")).toBe(mode);
+    expect(document.querySelector('[role="tab"][aria-selected="true"]')?.textContent).toBe(label);
+    expect(document.querySelector(".reader-controls")?.contains(button(label))).toBe(true);
+  }
+  expect(api.translateSelection).not.toHaveBeenCalled();
+  expect(vi.mocked(api.parseReaderPage).mock.calls.every((call) => call[2] === true)).toBe(true);
+});
+
+it("窄双语分区使用较窄栏的可用宽度，两侧纸页保持同宽", async () => {
+  vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockImplementation(function (this: HTMLElement) {
+    return this.classList.contains("pdf-stage") ? 360 : this.classList.contains("compare-page-stage") ? 320 : 0;
+  });
+  await render();
+  const original = document.querySelector<HTMLElement>(".pdf-stage .continuous-reader-page")!;
+  const translated = document.querySelector<HTMLElement>(".compare-page-stage .continuous-reader-page")!;
+  const originalWidth = Number.parseFloat(original.style.width);
+  const translatedWidth = Number.parseFloat(translated.style.width);
+  expect(originalWidth).toBeGreaterThan(0);
+  expect(originalWidth).toBeLessThanOrEqual(320 - 32);
+  expect(translatedWidth).toBe(originalWidth);
+  expect(original.style.minHeight).toBe(translated.style.minHeight);
+  expect(api.translateSelection).not.toHaveBeenCalled();
+});
+
+it("双语分区变窄后重新适配，两侧不保留导致横向裁切的缩放下限", async () => {
+  const observers: Array<{ callback: ResizeObserverCallback; nodes: Element[] }> = [];
+  vi.stubGlobal("ResizeObserver", class {
+    nodes: Element[] = [];
+    constructor(callback: ResizeObserverCallback) { observers.push({ callback, nodes: this.nodes }); }
+    observe(node: Element) { this.nodes.push(node); }
+    unobserve() {}
+    disconnect() {}
+  });
+  let paneWidth = 600;
+  vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockImplementation(function (this: HTMLElement) {
+    return this.classList.contains("pdf-stage") || this.classList.contains("compare-page-stage") ? paneWidth : 0;
+  });
+  await render();
+  const original = document.querySelector<HTMLElement>(".pdf-stage .continuous-reader-page")!;
+  const translated = document.querySelector<HTMLElement>(".compare-page-stage .continuous-reader-page")!;
+  const initialWidth = Number.parseFloat(original.style.width);
+  const fitObserver = observers.find((observer) => observer.nodes.some((node) => node.classList.contains("pdf-stage")) && observer.nodes.some((node) => node.classList.contains("compare-page-stage")));
+  expect(fitObserver).toBeDefined();
+  await act(async () => document.querySelector<HTMLButtonElement>('[aria-label="放大页面"]')!.click());
+  const zoomedWidth = Number.parseFloat(original.style.width);
+  expect(zoomedWidth).toBeGreaterThan(initialWidth);
+  // Status wrapping or a horizontal scrollbar changes height, not the available width.
+  await act(async () => fitObserver!.callback([], {} as ResizeObserver));
+  expect(Number.parseFloat(original.style.width)).toBe(zoomedWidth);
+  paneWidth = 280;
+  await act(async () => fitObserver!.callback([], {} as ResizeObserver));
+  const fittedWidth = Number.parseFloat(original.style.width);
+  expect(fittedWidth).toBeGreaterThan(0);
+  expect(fittedWidth).toBeLessThan(initialWidth);
+  expect(fittedWidth).toBeLessThanOrEqual(paneWidth - 32);
+  expect(Number.parseFloat(translated.style.width)).toBe(fittedWidth);
+  expect(api.translateSelection).not.toHaveBeenCalled();
 });

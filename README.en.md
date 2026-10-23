@@ -101,6 +101,9 @@ The server reads PDFs from disk, deduplicates by file hash (SHA-256), writes met
 API: `POST /api/projects/:projectId/library/scan-inbox` (requires `workspacePath`).
 
 ### PDF reader with structured annotations
+
+The reader shares one top toolbar for page navigation, zoom, OCR, translation actions, linked scrolling and view tabs, with progress and fallback notices in a separate status row. Both panes use matching page origins, margins and zoom, fitting the narrower pane. Linked scrolling synchronizes both page-relative vertical position and horizontal position; disabling it keeps panes independent. Height-only changes preserve manual zoom. Translations retain natural text flow, with vertical linking based on relative position within each page.
+
 Built-in PDF reader with OCR. **Select any passage and a floating bubble appears right at the selection** with 翻译 / 高亮 / 笔记 / 证据 one tap away:
 
 - **划词翻译** — the translation renders inline in the bubble (the sidebar card keeps the last result). Only the selected text, its page, and the paper title are sent — never the whole document. Repeating a selection is free: it is served from an in-memory cache. One call covers up to 8,000 characters — a sentence or a paragraph, not a whole page; an over-long selection is refused with an explicit message (and the sidebar character counter turns red) instead of being silently truncated. Use the side-by-side reader below for whole-paper translation.

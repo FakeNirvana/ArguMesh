@@ -17,6 +17,28 @@ function stage(heights: number[]) {
 }
 
 describe("continuous reader page alignment", () => {
+  it("keeps the top padding visible when linking or restoring the first page", () => {
+    const original = stage([800, 800]);
+    const translated = stage([1200, 1000]);
+    const position = readPageScroll(original);
+    translated.scrollTop = pageScrollTop(translated, position);
+    expect(translated.scrollTop).toBe(0);
+    expect(pageScrollTop(original, readPageScroll(translated))).toBe(0);
+
+    original.scrollTop = 9;
+    const partialPadding = readPageScroll(original);
+    expect(pageScrollTop(original, partialPadding)).toBe(9);
+    expect(partialPadding.progress).toBeGreaterThan(0);
+  });
+
+  it("round-trips the first page of a single-page document with top padding", () => {
+    const root = stage([800]);
+    for (const top of [0, 9, 18, 400, 818]) {
+      root.scrollTop = top;
+      expect(pageScrollTop(root, readPageScroll(root))).toBeCloseTo(top);
+    }
+  });
+
   it("links the same page and progress even when translated pages have different heights", () => {
     const original = stage([800, 800, 800]);
     const translated = stage([1200, 1000, 1800]);

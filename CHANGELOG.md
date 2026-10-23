@@ -8,6 +8,11 @@ ArguMesh（论脉）的版本历史。README 只保留指向本文件的入口�
 
 ---
 
+## Unreleased (2026-10-23) — Reader pane alignment and shared controls
+
+- Moved translation actions, view tabs and navigation into a shared top toolbar, with progress and fallback notices above both panes. Matched page origins and margins, fitted both pages to the narrower pane and preserved manual zoom on height-only changes. Linked scrolling now follows both horizontal and page-relative vertical position, including the first page's leading margin; independent scrolling remains available. No database migration or new installer release.
+- 将翻译操作、视图页签与阅读导航集中到顶部公共工具栏，进度和降级提示单独展示，不再将右侧纸页向下推移。统一两栏纸页起点、留白和缩放，窄栏按较小可用宽度适配；仅高度变化时保留手动缩放。双屏关联同时同步横向和页内纵向位置，首页保留顶部留白，关闭关联可独立滚动。无需数据库迁移，尚未发布新安装包。
+
 ## Unreleased (2026-10-23) — PDF persistence across restarts
 
 - Save uploaded PDF filenames with their contents in the local database. Restore the Read action for existing database PDFs that have no filename when browser storage is empty after a desktop restart or update. Reader uploads now report database failures before marking an attachment saved. No database migration; no new installer release.
