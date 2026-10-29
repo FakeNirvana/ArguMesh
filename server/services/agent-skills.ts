@@ -113,9 +113,9 @@ export function prepareSkillInstall(input: unknown): AgentSkill {
 function builtinSkill(name: string, enabled: boolean): AgentSkill | null {
   const builtin = BUILTIN_AGENT_SKILLS.find((skill) => skill.name === name);
   if (!builtin) return null;
-  const files = [{ path: "SKILL.md", content: builtin.content }];
+  const files = builtin.files.map((file) => ({ ...file }));
   return { id: `builtin:${name}`, name, description: builtin.description, source: "builtin", enabled,
-    version: skillPackageVersion(files), installedAt: null, fileCount: 1, files, warnings: [] };
+    version: skillPackageVersion(files), installedAt: null, fileCount: files.length, files, warnings: packageWarnings(files) };
 }
 
 function userSkill(row: typeof agentSkills.$inferSelect): AgentSkill {
@@ -132,8 +132,9 @@ function userSkill(row: typeof agentSkills.$inferSelect): AgentSkill {
 export async function listAgentSkills(env: AppBindings): Promise<AgentSkillSummary[]> {
   const rows = await createDatabase(env).select().from(agentSkills);
   const overrides = new Map(rows.filter((row) => row.source === "builtin").map((row) => [row.id, row.enabled]));
+  const userNames = new Set(rows.filter((row) => row.source === "user").map((row) => row.name));
   const skills = [
-    ...BUILTIN_AGENT_SKILLS.map((skill) => builtinSkill(skill.name, overrides.get(`builtin:${skill.name}`) ?? true)!),
+    ...BUILTIN_AGENT_SKILLS.filter((skill) => !userNames.has(skill.name)).map((skill) => builtinSkill(skill.name, overrides.get(`builtin:${skill.name}`) ?? true)!),
     ...rows.filter((row) => row.source === "user").map(userSkill).sort((a, b) => a.name.localeCompare(b.name)),
   ];
   return skills.map(({ files: _files, ...summary }) => summary);
@@ -141,7 +142,13 @@ export async function listAgentSkills(env: AppBindings): Promise<AgentSkillSumma
 
 export async function getAgentSkill(env: AppBindings, id: string): Promise<AgentSkill | null> {
   const row = await createDatabase(env).select().from(agentSkills).where(eq(agentSkills.id, id)).get();
-  if (id.startsWith("builtin:")) return builtinSkill(id.slice("builtin:".length), row?.enabled ?? true);
+  if (id.startsWith("builtin:")) {
+    const name = id.slice("builtin:".length);
+    const installed = await createDatabase(env).select({ source: agentSkills.source }).from(agentSkills).where(eq(agentSkills.name, name)).get();
+    // Existing user content, including a disabled installation, must never be bypassed.
+    if (installed?.source === "user") return null;
+    return builtinSkill(name, row?.enabled ?? true);
+  }
   return row?.source === "user" ? userSkill(row) : null;
 }
 

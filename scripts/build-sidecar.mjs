@@ -7,6 +7,7 @@
 //   server.mjs          esbuild 单文件,裸 node 直接运行,不需要 tsx,也不需要 node_modules
 //   node_modules/       仅 1 个运行时原生包(esbuild 无法内联 .node,必须整包带上)
 //   dist/               前端产物(pnpm run build 的输出,需先执行)
+//   nature/             内置 Nature 技能的只读文本包与目录索引
 //   template/           仅含表结构的空库,首次启动由桌面壳复制到用户数据目录
 //   .env.example        可选配置说明,运行时复制为 .env 才生效
 //   node(.exe)         由 --node-exe 拷入(桌面打包必需)
@@ -276,6 +277,10 @@ if (!(await exists(path.join(root, "dist", "index.html")))) {
 }
 console.log("[sidecar] 拷贝前端产物 dist/ …");
 await cp(path.join(root, "dist"), path.join(outDir, "dist"), { recursive: true });
+
+// Builtin skills resolve beside import.meta.url in the bundled server, independently of cwd.
+console.log("[sidecar] 拷贝内置 Nature 技能文本包 …");
+await cp(path.join(root, "server", "skills", "nature"), path.join(outDir, "nature"), { recursive: true });
 
 // 5. 空库模板:仅结构、无业务数据。首次启动由桌面壳复制到用户数据目录,
 //    所以这里绝不可能是开发者自己那份 data/argumesh.db(实测 166 MB 开发数据)。

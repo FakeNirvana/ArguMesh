@@ -37,13 +37,25 @@ describe("Research Agent skill installation and management", () => {
     const response = await request("");
     expect(response.status).toBe(200);
     const { skills } = await response.json() as { skills: AgentSkillSummary[] };
-    expect(skills.filter((skill) => skill.source === "builtin")).toHaveLength(3);
+    expect(skills.filter((skill) => skill.source === "builtin")).toHaveLength(11);
+    expect(skills.map((skill) => skill.name).sort()).toEqual([
+      "nature-academic-search", "nature-citation", "nature-data", "nature-figure", "nature-paper-to-patent", "nature-paper2ppt",
+      "nature-polishing", "nature-reader", "nature-response", "nature-reviewer", "nature-writing",
+    ]);
     expect(skills.every((skill) => skill.enabled && /^[a-f0-9]{64}$/.test(skill.version))).toBe(true);
     expect(skills.every((skill) => !("files" in skill))).toBe(true);
-    const detail = await request(`/${encodeURIComponent(skills[0].id)}`);
+    const detail = await request(`/${encodeURIComponent("builtin:nature-reviewer")}`);
     const { skill } = await detail.json() as { skill: AgentSkill };
     expect(skill.files[0]).toMatchObject({ path: "SKILL.md" });
-    expect(skill.files[0].content).toContain("project_context");
+    expect(skill.files[0].content).toContain("name: nature-reviewer");
+    expect(skill.files.some((file) => file.path === "references/review-axes.md" && file.content.length > 100)).toBe(true);
+    expect(skill.fileCount).toBeGreaterThan(1);
+    const samePackage = prepareSkillInstall([...skill.files].reverse());
+    expect(samePackage.version).toBe(skill.version);
+    const changedResource = prepareSkillInstall(skill.files.map((file) => file.path === "references/review-axes.md" ? { ...file, content: `${file.content}\nResource version check.\n` } : file));
+    expect(changedResource.version).not.toBe(skill.version);
+    const secondRead = await request(`/${encodeURIComponent(skill.id)}`);
+    expect(((await secondRead.json()) as { skill: AgentSkill }).skill.version).toBe(skill.version);
   });
 
   it("imports a folder with quoted/multiline metadata and retains package-relative text resources", async () => {
@@ -68,7 +80,7 @@ describe("Research Agent skill installation and management", () => {
     expect(duplicate.status).toBe(409);
     const detail = await request(`/${encodeURIComponent(original.id)}`);
     expect(((await detail.json()) as { skill: AgentSkill }).skill.version).toBe(original.version);
-    expect((await request("", "POST", { files: [{ path: "SKILL.md", content: content("evidence-review") }] })).status).toBe(409);
+    expect((await request("", "POST", { files: [{ path: "SKILL.md", content: content("nature-reviewer") }] })).status).toBe(409);
   });
 
   it("requires JSON media types for installation instead of accepting cross-origin simple form requests", async () => {
@@ -83,7 +95,7 @@ describe("Research Agent skill installation and management", () => {
   });
 
   it("persists builtin enablement and protects builtin uninstallation", async () => {
-    const id = encodeURIComponent("builtin:evidence-review");
+    const id = encodeURIComponent("builtin:nature-reviewer");
     expect((await request(`/${id}`, "PATCH", { enabled: false })).status).toBe(200);
     const { skill } = await (await request(`/${id}`)).json() as { skill: AgentSkill };
     expect(skill.enabled).toBe(false);
@@ -151,6 +163,45 @@ describe("Research Agent skill installation and management", () => {
     const message = await db.select().from(aiMessages).where(eq(aiMessages.id, "skill-history-message")).get();
     expect(JSON.parse(message!.skillsJson)).toEqual(snapshot);
     expect(JSON.parse(message!.skillSelectionJson)).toEqual([skill.id]);
+  });
+
+  it("preserves a previously installed user Nature package instead of replacing it with the builtin", async () => {
+    const db = createDatabase(context.bindings);
+    await db.delete(agentSkills).where(eq(agentSkills.id, "builtin:nature-reviewer"));
+    const legacy = prepareSkillInstall([
+      { path: "SKILL.md", content: content("nature-reviewer", "User-owned legacy review instructions.") },
+      { path: "references/private-review.md", content: "Keep this installed resource unchanged." },
+    ]);
+    await db.insert(agentSkills).values({
+      id: legacy.id, name: legacy.name, description: legacy.description, source: "user", filesJson: JSON.stringify(legacy.files),
+      enabled: true, version: legacy.version, installedAt: legacy.installedAt, updatedAt: legacy.installedAt!,
+    });
+    try {
+      const { skills } = await (await request("")).json() as { skills: AgentSkillSummary[] };
+      expect(skills.filter((skill) => skill.name === legacy.name)).toEqual([expect.objectContaining({ id: legacy.id, source: "user", version: legacy.version, enabled: true })]);
+      const available = (await getAvailableAgentSkills(context.bindings)).filter((skill) => skill.name === legacy.name);
+      expect(available).toHaveLength(1);
+      expect(available[0].id).toBe(legacy.id);
+      expect(available[0].files).toEqual(legacy.files);
+      expect(((await (await request(`/${encodeURIComponent(legacy.id)}`)).json()) as { skill: AgentSkill }).skill.files).toEqual(legacy.files);
+    } finally { await db.delete(agentSkills).where(eq(agentSkills.id, legacy.id)); }
+  });
+
+  it("does not fall back to an enabled builtin when the existing same-name user skill is disabled", async () => {
+    const db = createDatabase(context.bindings);
+    const legacy = prepareSkillInstall([{ path: "SKILL.md", content: content("nature-reviewer", "Keep the user's disabled workflow disabled.") }]);
+    await db.insert(agentSkills).values({
+      id: legacy.id, name: legacy.name, description: legacy.description, source: "user", filesJson: JSON.stringify(legacy.files),
+      enabled: false, version: legacy.version, installedAt: legacy.installedAt, updatedAt: legacy.installedAt!,
+    });
+    try {
+      const { skills } = await (await request("")).json() as { skills: AgentSkillSummary[] };
+      expect(skills.filter((skill) => skill.name === legacy.name)).toEqual([expect.objectContaining({ id: legacy.id, source: "user", enabled: false })]);
+      expect((await getAvailableAgentSkills(context.bindings)).some((skill) => skill.name === legacy.name)).toBe(false);
+      await expect(getAvailableAgentSkills(context.bindings, [legacy.id])).rejects.toMatchObject({ code: "SKILL_DISABLED", status: 409 });
+      await expect(getAvailableAgentSkills(context.bindings, ["builtin:nature-reviewer"])).rejects.toMatchObject({ code: "SKILL_NOT_FOUND", status: 404 });
+      expect(((await (await request(`/${encodeURIComponent(legacy.id)}`)).json()) as { skill: AgentSkill }).skill.files).toEqual(legacy.files);
+    } finally { await db.delete(agentSkills).where(eq(agentSkills.id, legacy.id)); }
   });
 });
 

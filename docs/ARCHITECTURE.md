@@ -31,7 +31,7 @@ server/
 ├── db/                # client.ts / schema.ts / projects.ts
 ├── routes/            # API 处理器
 ├── services/          # 领域与执行助手
-└── skills/            # 随应用编译的内置科研技能
+└── skills/            # 随服务分发的内置科研技能文本与 catalog
 ```
 
 ### `index.ts`
@@ -63,15 +63,19 @@ server/
 
 ### Research Agent 与 skills
 
-**源码新增（2026-10-21，尚未发布安装包）。** Research Agent 的技能发现、安装与使用由应用管理。内置内容在 `server/skills/builtin.ts` 编译进 Web / 桌面服务，用户从对话区导入本地 `SKILL.md` 或技能文件夹，经预览后安装。`server/routes/agent-skills.ts` 处理管理写入，`server/services/agent-skills.ts` 解析包、装配注册表；`shared/agent-skills.ts` 是前后端共享类型。
+**源码功能（2026-10-22 更新，尚未发布新安装包）。** Research Agent 的技能发现、安装与使用由应用管理。默认内置改为 11 个 Nature 技能，取代此前的 `evidence-review`、`experiment-planning`、`manuscript-review` 三个默认工作流。源码资产在 `server/skills/nature/<name>/`，清单在 `server/skills/nature/catalog.json`，由 `server/skills/builtin.ts` 加载；桌面构建把资源复制到与 `server.mjs` 同级的 `sidecar/nature/`。左侧栏「管理技能」仍打开同一管理弹窗，用户也可预览安装本地 `SKILL.md` 或技能文件夹。`server/routes/agent-skills.ts` 处理管理写入，`server/services/agent-skills.ts` 解析包、装配注册表；`shared/agent-skills.ts` 是前后端共享类型。
 
 | 来源 | 保存与管理 |
 | --- | --- |
-| 内置技能 | `evidence-review`、`experiment-planning`、`manuscript-review` 三个完整 `SKILL.md`；可查看与启停，不可卸载 |
+| 内置技能 | 11 个 Nature 文本包，含 `SKILL.md` 与包内指令/参考资料；只读，可查看与启停，不可卸载 |
 | 用户技能 | `agent_skills` 保存完整文本包、内容哈希、来源与时间；可查看、启停、卸载，同机所有项目共用 |
 | 本轮实际使用 | `ai_messages.skills_json` 保存加载时的完整内容快照及版本、来源、时间，消息关联实际模型；`skill_selection_json` 保存本轮选择供历史与重试使用 |
 
-安装包须有唯一根 `SKILL.md`，也可带一个共同的技能文件夹前缀。最多 64 个文本文件，每文件 64 KiB、每包 512 KiB，`SKILL.md` 正文最多 32,000 字符。后端拒绝绝对路径、路径穿越、重复路径及不合规文本包；不读取用户提交的服务器磁盘路径。同名安装返回冲突，不静默替换内置或已安装内容。脚本可作为文本资料保留并提示兼容限制，不执行。
+默认清单为 `nature-academic-search`、`nature-citation`、`nature-data`、`nature-figure`、`nature-paper-to-patent`、`nature-paper2ppt`、`nature-polishing`、`nature-reader`、`nature-response`、`nature-reviewer`、`nature-writing`。同名用户安装优先于内置版本，即使该用户版本已停用，也不会重新显示或自动启用内置版本。更新默认清单不修改旧消息的技能内容快照；原三个默认工作流的历史记录继续保留。
+
+技能包须有唯一根 `SKILL.md`，也可带一个共同的技能文件夹前缀。每包最多 64 个文本文件，每文件 64 KiB、每包 512 KiB，`SKILL.md` 正文最多 32,000 字符；内置 Nature 包也遵守该边界。后端拒绝绝对路径、路径穿越、重复路径及不合规文本包；不读取用户提交的服务器磁盘路径。同名安装返回冲突，不静默替换内置或已安装内容。脚本可作为文本资料保留并提示兼容限制，不执行。
+
+Nature 发布文本包保留指令与研究资料，剔除非运行元数据及二进制图集；超限的 citation 脚本正文分块归档，原 `scripts/nature_citation.py` 仅作索引。`writing`、`polishing`、`reader`、`paper2ppt` 原下载中缺失的 `_shared` 文件已标注，不跨包或从宿主文件系统补读。兼容与来源说明见 [`server/skills/nature/README.md`](../server/skills/nature/README.md)。这些文本包不接入 Python / R / MCP、图表渲染、PPTX / DOCX 等执行能力，不能把资料可读取等同于原技能工具链全部可用。
 
 `server/routes/conversations.ts` 在回合开始时确定允许的启用技能及内容版本。对话选择「自动选择」时，模型获得技能目录并通过 `skill_load` 按需加载；指定技能时先加载该技能；「不使用技能」时本轮没有可加载技能。兼容 `/skill:name 参数` 的手动指令也只在应用管理的本轮允许范围内解析，停用或未知技能不会落回隐式文件发现。
 
@@ -79,7 +83,7 @@ server/
 
 `DefaultResourceLoader` 显式关闭 SDK 的 skills、extensions、prompt templates、themes 与 context files 加载，并使用应用自己的系统提示，不读取隐式 SYSTEM / APPEND_SYSTEM 提示文件。服务 cwd、项目 `workspacePath`、用户或祖先 `.agents/skills` / `.pi/skills` 中已有技能不会隐式加载进会话；第三方技能不能运行 Pi 扩展、任意 Shell、Python 或文件写入。旧轮加载过技能后，下一轮会重建 Pi 会话并恢复有界的已完成对话，避免旧技能指令因会话缓存继续生效；技能目录变化也会触发重建。
 
-**维护定位**：安装管理看 `server/routes/agent-skills.ts` / `server/services/agent-skills.ts`；回合边界与记录看 `server/routes/conversations.ts`；技能加载、资源读取与会话重建看 `server/services/pi-agent.ts`；迁移 `0015_agent_skills` 在 `scripts/migrate-custom.ts`。技能正文与资料始终作为低于系统规则的不可信输入，工具白名单和应用校验继续决定可执行动作。
+**维护定位**：内置包、清单与兼容说明看 `server/skills/nature/`，加载器看 `server/skills/builtin.ts`，桌面资源复制看 `scripts/build-sidecar.mjs`；安装管理看 `server/routes/agent-skills.ts` / `server/services/agent-skills.ts`；回合边界与记录看 `server/routes/conversations.ts`；技能加载、资源读取与会话重建看 `server/services/pi-agent.ts`。此次默认包替换无新数据库迁移，尚未接入 skills 的源码旧库仍需 `scripts/migrate-custom.ts` 中的 `0015_agent_skills`。技能正文与资料始终作为低于系统规则的不可信输入，工具白名单和应用校验继续决定可执行动作。
 
 ### `server/ai/`——无 DB 依赖的能力层
 

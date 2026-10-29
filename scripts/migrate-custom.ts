@@ -21,6 +21,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createClient, type Client } from "@libsql/client";
 import { loadBindings } from "../server/env";
+import { AGENT_SKILLS_MIGRATION_HASH as MIGRATION_0015_HASH, applyAgentSkillsMigration as applyMigration0015 } from "../server/db/agent-skills-migration";
 
 config();
 
@@ -295,28 +296,6 @@ async function applyMigration0014(client: Client): Promise<void> {
 }
 
 // ─── Migration 0015:应用管理的技能与消息技能快照 ───
-
-const MIGRATION_0015_HASH = "0015_agent_skills";
-
-async function applyMigration0015(client: Client): Promise<void> {
-  await client.execute(`CREATE TABLE IF NOT EXISTS agent_skills (
-    id text PRIMARY KEY NOT NULL,
-    name text NOT NULL,
-    description text NOT NULL DEFAULT '',
-    source text NOT NULL CHECK (source IN ('builtin', 'user')),
-    files_json text NOT NULL DEFAULT '[]',
-    enabled integer NOT NULL DEFAULT 1,
-    version text NOT NULL DEFAULT '',
-    installed_at text,
-    updated_at text NOT NULL
-  )`);
-  await client.execute("CREATE UNIQUE INDEX IF NOT EXISTS agent_skills_name_uniq ON agent_skills (name)");
-  const columns = await client.execute("PRAGMA table_info(ai_messages)");
-  const names = new Set(columns.rows.map((column) => String(column.name)));
-  if (!names.has("skills_json")) await client.execute("ALTER TABLE ai_messages ADD COLUMN skills_json text NOT NULL DEFAULT '[]'");
-  if (!names.has("skill_selection_json")) await client.execute("ALTER TABLE ai_messages ADD COLUMN skill_selection_json text NOT NULL DEFAULT 'null'");
-  await client.execute({ sql: "INSERT OR IGNORE INTO __drizzle_migrations (hash, created_at) VALUES (?, ?)", args: [MIGRATION_0015_HASH, 15] });
-}
 
 // ─── Migration runner (逐条执行) ───
 

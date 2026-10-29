@@ -82,13 +82,35 @@ pnpm tauri build
 
 ## Research Agent 与 Skills 接入现状
 
-**本节对应 2026-10-21 新增源码功能，尚未发布新安装包。** Research Agent 内置证据梳理、实验规划和论文审查技能，并提供本地技能安装管理。对话可自动选择、指定技能或不使用技能；运行边界与记录方式见 [`ARCHITECTURE.md` 的「Research Agent 与 skills」](ARCHITECTURE.md#research-agent-与-skills)。
+**本节功能已纳入 v3.3.3 本地构建（2026-10-29），尚未上传 GitHub Releases。** Research Agent 默认内置改为 11 个 Nature 技能，取代原三个默认工作流，并保留本地技能安装管理。对话可自动选择、指定技能或不使用技能；运行边界与记录方式见 [`ARCHITECTURE.md` 的「Research Agent 与 skills」](ARCHITECTURE.md#research-agent-与-skills)。
 
-- **管理入口**：点击左侧栏「管理技能」打开现有管理弹窗，安装与启停设置由所有项目共用；Research Agent 输入区只保留自动选择、不使用技能和指定技能。此次入口移动不新增数据库迁移，也未发布新安装包。
+- **管理入口**：点击左侧栏「管理技能」打开现有管理弹窗，安装与启停设置由所有项目共用；Research Agent 输入区只保留自动选择、不使用技能和指定技能。内置内容只读，可启停、不可卸载；用户技能还可卸载。已有同名用户安装优先，包括已停用的安装，不被内置版本覆盖或自动启用。
 - **安装格式**：选择单个 `SKILL.md` 或包含它的技能文件夹，预览后安装。根文件须有 YAML frontmatter，`name` 使用小写字母、数字和连字符，`description` 非空；允许附带包内文本资料。最多 64 个文本文件，每文件 64 KiB、每包 512 KiB，`SKILL.md` 正文最多 32,000 字符。同名包不能静默覆盖；内置技能仅可启停，用户技能还可卸载。二进制资料不作为可读取文本导入；脚本即使保存，也只作为文本资料，不执行。
 - **本地保存**：安装内容和启停设置保存在应用数据库，由所有项目共用，不依赖 `process.cwd()` 或项目 `workspacePath`。SDK 的全局/项目技能、扩展、提示词和上下文文件自动发现已关闭；已有 `.agents/skills` 或 `.pi/skills` 不会自动出现在列表，需要通过安装入口导入。
 - **运行限制**：`skill_load` / `skill_read` 只读取本轮允许的技能及其包内文本；每轮最多加载三个技能，资源每段最多 12,000 字符、每轮最多 48,000 字符。领域工具继续保留每轮一个草稿写入和 `ai_actions` 审计，不因技能正文获得额外工具权限。
 - **历史与调试**：消息保留实际加载技能的完整内容快照、来源、内容哈希及加载时间；停用、卸载或重装不改写旧记录。使用模拟模型与临时数据库检查启停/选择、路径与大小校验、自动加载和历史保留；不以执行未知脚本或扩展证明技能可用。入口是 `server/routes/agent-skills.ts`、`server/services/agent-skills.ts`、`server/services/pi-agent.ts` 和 `server/routes/conversations.ts`。
+
+### 内置 Nature 文本包
+
+| 包名 | 用途 |
+| --- | --- |
+| `nature-academic-search` | 多源文献检索、检索策略与引用文件管理 |
+| `nature-citation` | 主张分段、引用支持度核验与参考文献流程 |
+| `nature-data` | 数据可用性声明、仓储与 FAIR 元数据核对 |
+| `nature-figure` | 科研绘图设计、图表与图例质量检查 |
+| `nature-paper-to-patent` | 从已提供研究材料起草专利内容 |
+| `nature-paper2ppt` | 论文汇报的结构、版式与素材规划 |
+| `nature-polishing` | 学术文本润色与中英表达调整 |
+| `nature-reader` | 基于已提供原文的双语阅读工作流 |
+| `nature-response` | 审稿意见分类、修回策略与逐点回复 |
+| `nature-reviewer` | 基于手稿事实的模拟评审 |
+| `nature-writing` | 从主张与证据起草、组织论文章节 |
+
+可维护的源码目录为 `server/skills/nature/<name>/`，`catalog.json` 保存内置清单，`server/skills/builtin.ts` 加载文本包。它们随仓库分发，不依赖开发机的 `.agents/skills`；桌面构建由 `scripts/build-sidecar.mjs` 复制到与 `server.mjs` 同级的 `sidecar/nature/`。调整包内容后需同时核对清单、内容版本和现有大小/路径约束，不把生成结果或本机配置放进源码资产。
+
+发布文本包保留指令与研究资料，并剔除非运行元数据及 `nature-figure` 的二进制图集。`nature-citation` 超过单文件上限的原脚本正文分到 `scripts/nature-citation-source-part-1.txt`、`-2.txt`，原 `scripts/nature_citation.py` 只保留索引说明，不能作为完整脚本运行。四包 `nature-writing`、`nature-polishing`、`nature-reader`、`nature-paper2ppt` 引用的 `_shared` 资料在下载源中缺失，已显式说明；包内读取不会为此访问父目录或宿主文件。详细来源与适配范围见 [`server/skills/nature/README.md`](../server/skills/nature/README.md)。
+
+这些技能提供文本流程与参考资料，当前没有接入其 Python / R / MCP 工具链、PDF/图像处理、图表渲染及 PPTX / DOCX 文件生成。验证时区分“Agent 实际加载并按需读取包内文本”和“执行原技能完整工具链”；后者不能通过技能名称或正文声明推定。此次内置清单替换无新 schema 迁移，原三个技能的旧消息快照保留；尚未升级 skills 的源码旧库仍需下述 `0015_agent_skills`。
 
 一个最小的 `SKILL.md` 示例：
 
@@ -110,6 +132,7 @@ description: 用项目已有证据检查研究问题是否清楚、可验证。
 - **`drizzle/` + journal（`drizzle/meta/_journal.json`）覆盖 0000–0007**，由 `scripts/migrate.ts` 应用（`pnpm run db:migrate`）。
 - **0007 之后全部由 `scripts/migrate-custom.ts` 逐条手写执行**：`0008_drop_accounts`、`0009_workspace_path`、`0010_research_question_origins`、`0011_experiment_result_analysis`、`0012_research_agent_conversations`、`0013_research_question_conclusions`、`0014_research_question_evidence`、`0015_agent_skills`。原因是 drizzle migrator 的 libsql 批处理路径会在多语句迁移上抛 `SQLITE_UNKNOWN_0`。每个 hash 会登记进 `__drizzle_migrations`。
 - `tests/api/helpers.ts` 用同一个脚本构建全新临时库。
+- 桌面 v3.3.3 由 `server/index.ts` 在技能与 Agent 对话 API 请求前调用 `ensureDesktopAgentSkillsSchema`，在事务中复用 `server/db/agent-skills-migration.ts` 的 `0015` 逻辑，为 v3.3.2 旧库补齐技能结构；同进程并发请求共用一次迁移，失败可重试。源码运行仍按下述命令迁移。
 - `0015_agent_skills` 新增 `agent_skills` 表，并为 `ai_messages` 增加 `skills_json`（默认 `[]`，实际加载快照）与 `skill_selection_json`（默认 `null`，自动选择；`[]` 表示不使用技能）列，保留已有消息与研究数据。源码旧库升级先确认 `DATABASE_URL` 指向需要升级的库，再运行 `pnpm exec tsx scripts/migrate-custom.ts`；`pnpm run db:migrate` 只处理上面的 drizzle 轨道，不能替代本迁移。
 - schema 旧注释还把 0015/0016 用于 `evidence_layers.promotedTo`，那部分没有独立 journal / SQL，属于历史说明；不要与实际的 `0015_agent_skills` 混淆。
 

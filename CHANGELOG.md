@@ -8,6 +8,17 @@ ArguMesh（论脉）的版本历史。README 只保留指向本文件的入口�
 
 ---
 
+## v3.3.3 (2026-10-29) — Local Windows desktop build
+
+- Bump package, Tauri and Cargo versions to 3.3.3. Prepare a local Windows x64 installer with the current reader alignment, PDF persistence, Paper Card comparison and eleven bundled Nature text workflows. No GitHub Release or new Mac DMG is published by this packaging task.
+- Reuse the existing additive `0015_agent_skills` migration in a transaction before desktop API requests. Upgrades from v3.3.2 retain projects, messages and AI settings; concurrent first requests share the migration and failures can retry. Source databases still use the custom migration command. No new migration number.
+- Fresh installations contain an empty schema-only database, no user data or AI credentials. The installer is unsigned; the application has no authentication and binds to loopback. Nature Python/R/MCP execution and PPTX/DOCX/figure generation remain unavailable.
+- 统一 package、Tauri 与 Cargo 版本号为 3.3.3，本地 Windows x64 安装包纳入阅读器双栏对齐、PDF 重启持久化、Paper Card 对照填写与 11 个 Nature 技能文本包。本次打包不发布 GitHub Release，也未生成新版 Mac DMG。
+- 桌面 API 请求前以事务复用已有 `0015_agent_skills` 增量迁移，兼容 v3.3.2 旧库并保留项目、消息与 AI 配置；并发首请求共用迁移，失败可重试。源码旧库仍使用 custom 迁移命令，无新增迁移编号。
+- 新安装为空结构库，不含用户数据或 AI 密钥；安装包未签名，应用无鉴权、仅监听本机。Nature 的 Python/R/MCP 执行及 PPTX/DOCX/图表生成尚未接入。
+- Validation: typecheck and production build passed; 335/335 tests passed in 66 files using `pnpm run test --pool=forks`, plus 5/5 Rust tests. The packaged sidecar passed fresh-template, skill-resource, PDF/workspace/OCR restart and v3.3.2 upgrade checks, including retained AI settings and repeat-start idempotence. The default thread pool returned a nonzero exit after passing its assertions on this Windows host; the isolated fork pool completed successfully.
+- 验证：类型检查、生产构建通过；`pnpm run test --pool=forks` 共 66 个文件、335/335 测试通过，Rust 测试 5/5 通过。打包 sidecar 的空库、技能资源、PDF/工作区/OCR 重启及 v3.3.2 旧库升级检查通过，含 AI 配置保留和重复启动幂等。本机默认线程池在断言通过后返回非零，改用独立进程池成功结束。
+
 ## Docs (2026-10-29) — Community links and README languages
 
 - Added centered links to the WeChat community and [official website](https://argumesh.nekocfy.com/) near the top of both READMEs, and moved QR-code display and expiry notices to [community issue #4](https://github.com/Fyuan0206/ArguMesh/issues/4). Replaced the QR image with the supplied original, valid before November 5, 2026. Kept `README.md` for Chinese and `README.en.md` for English, removed the duplicate `README.zh-CN.md`, and updated contributor documentation rules. No database migration.
@@ -22,6 +33,21 @@ ArguMesh（论脉）的版本历史。README 只保留指向本文件的入口�
 
 - Save uploaded PDF filenames with their contents in the local database. Restore the Read action for existing database PDFs that have no filename when browser storage is empty after a desktop restart or update. Reader uploads now report database failures before marking an attachment saved. No database migration; no new installer release.
 - 修复桌面版重启或更新后文献重新显示「上传 PDF」的问题：文件名随 PDF 本体持久化，浏览器缓存为空时也为数据库中已有的 PDF 恢复「阅读」入口；阅读器上传入库失败会明确报错。无需数据库迁移，已入库附件无需重新导入；仅存于旧浏览器缓存、从未入库的文件仍需重新选择一次。尚未发布新安装包。
+
+## Unreleased (2026-10-22) — Bundled Nature research skills
+
+- Replaced the three default research workflows with eleven bundled Nature text packages: academic search, citation, data availability, figures, paper-to-patent, paper presentations, polishing, reading, reviewer responses, simulated peer review and writing. The existing left-sidebar skill manager and turn selection remain; bundled content is read-only, can be enabled/disabled and cannot be uninstalled.
+- Added reviewable source assets under `server/skills/nature/<name>/` with a catalog and compatibility notes, included in Web/source use and desktop sidecar resources. Existing user installations with the same name take precedence, including disabled installations. Previous message snapshots retain their original content, including the former default workflows.
+- Retained the per-package limits of 64 text files, 64 KiB per file and 512 KiB in total. Omitted non-runtime metadata and binary figure collections, archived the oversized citation script in text chunks, and documented missing `_shared` references in four original packages. Python/R/MCP execution, figure rendering and PPTX/DOCX generation are not connected. No new database migration or installer release; source databases without skills support still need `0015_agent_skills`.
+
+<details>
+<summary>中文</summary>
+
+- 以 11 个内置 Nature 文本包替代原三个默认科研工作流，覆盖检索、引用、数据可用性、绘图、论文转专利、论文汇报 PPT、润色、阅读、审稿回复、模拟审稿与写作。保留左侧「管理技能」及对话选择；内置内容只读、可启停、不可卸载。
+- 在 `server/skills/nature/<name>/` 保存可审阅的源码资产、清单及兼容说明，供 Web/源码运行与桌面 sidecar 分发。已有同名用户安装优先，包括停用状态；旧消息继续保留原技能内容快照，也保留此前默认工作流的历史。
+- 每包继续限制为 64 个文本文件、单文件 64 KiB、总量 512 KiB。剔除非运行元数据与二进制图集，超限 citation 脚本按文本分块归档；四个原包缺失的 `_shared` 资料已明确标注。尚未接入 Python/R/MCP、图表渲染及 PPTX/DOCX 生成工具链。本次无新数据库迁移、未发布新安装包；尚无 skills 支持的源码旧库仍需 `0015_agent_skills`。
+
+</details>
 
 ## Unreleased (2026-10-21) — Skill management in the sidebar
 

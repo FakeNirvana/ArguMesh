@@ -1,56 +1,13 @@
+import { loadBundledNatureSkills } from "./nature-bundle";
+import type { AgentSkillFile } from "../../shared/agent-skills";
+
 export interface BuiltinAgentSkill {
   name: string;
   description: string;
+  /** Complete root document, retained for SDK and preview compatibility. */
   content: string;
+  files: AgentSkillFile[];
 }
 
-function builtin(name: string, description: string, instructions: string): BuiltinAgentSkill {
-  return {
-    name,
-    description,
-    content: `---\nname: ${name}\ndescription: ${JSON.stringify(description)}\n---\n\n${instructions.trim()}\n`,
-  };
-}
-
-/** First-party research workflows, bundled with both Web and desktop server builds. */
-export const BUILTIN_AGENT_SKILLS: BuiltinAgentSkill[] = [
-  builtin(
-    "evidence-review",
-    "梳理当前项目的研究证据、矛盾和不足；适用于总结研究洞见、比较已有结论或检查证据链。",
-    `# 项目证据梳理
-
-先调用 project_context，围绕用户当前问题核对项目文献、洞见、研究问题与实验。区分已观察事实、用户确认的内容、AI 草稿和仍待验证的推断；对象的标题或存在本身不构成支持其结论的证据。
-
-以“判断 — 支持它的项目对象 — 证据不足或冲突 — 下一步核验”组织结果。引用工具实际返回的对象 ID；只有已提供页码、摘录或位置时才给出位置。拿不到原文、指标或实验结果时，明确说明缺失并请求必要片段，不补造文献、引用、数字或结论。
-
-比较矛盾时，先检查任务定义、数据集、样本、指标与条件是否可比。证据不足与证据反驳分开表述。外部检索结果标注为外部、未核验，不能当作已确认的项目证据。
-
-默认只给分析。用户明确要求保存时，才通过适用的领域工具创建一个带已有来源的洞见草稿；一轮最多一个领域写入，不修改已确认或锁定内容。`,
-  ),
-  builtin(
-    "experiment-planning",
-    "将项目研究问题整理为可验证的实验计划，检查基线、消融、指标与失败判据；用于设计或审查实验。",
-    `# 可验证的实验计划
-
-先调用 project_context，明确当前研究问题、已有证据和已完成实验。将未知条件列为待确认项；不要把计划中的实验、预期提升或假设写成已完成的结果。
-
-围绕一个可证伪的假设提出计划：研究问题与来源对象、独立变量和控制条件、数据与划分、可比较的基线、主要指标、重复与随机性控制、消融，以及支持或否定假设的判据。根据项目实际情况选择必要项；不要凭空指定不存在的数据、预算或实验设施。
-
-检查信息泄漏、对照条件不一致、指标选择偏差和只报告成功结果的风险。对每个消融说明它排除哪种解释；指标阈值未知时提出如何确定阈值，不编造显著性或性能提升。
-
-默认先给可编辑的计划。用户要求保存新设计时使用 experiment_design_create_draft；要求为现有设计补一个消融时使用 ablation_design_add。每轮只执行其中一个写入；多项计划先列清单并请用户分轮继续。本技能不运行实验、Shell 或脚本，也不将计划标记为确认或完成。`,
-  ),
-  builtin(
-    "manuscript-review",
-    "基于项目证据审查论文论证、结构和表述，识别过度推断与缺失引用；用于写作检查或提出论文修改草稿。",
-    `# 有来源的论文审查
-
-先调用 project_context，确认用户要审查的范围、可用项目证据与当前论文版本。只审查实际提供的正文或选定片段；若工具只返回标题或版本号，不能假称已读到论文全文，应请求所需片段。
-
-优先核对主张与证据是否匹配，再检查研究问题、方法、结果、局限与结论之间的衔接。指出过度推广、因果与相关混淆、未经验证的新颖性声明和缺失的引用位置。每个问题给出原文位置（仅限已知）、对应项目对象 ID、修改理由和建议表达。未提供的数据与引用保持待补，禁止补造。
-
-尊重用户的研究结论和写作范围。润色不改变原意、结果数值或确认状态；有科学含义的改动单独解释，留给用户决定。
-
-默认返回审查意见与局部修改建议。只有用户要求提出论文 Diff、且已拿到完整当前源文件和它的准确 baseVersion 时，才用 paper_patch_propose 创建一个待审阅提案；缺少任一条件时不要拼造整份源文件。不直接应用 Diff 或读写任意文件，一轮最多一个领域写入。`,
-  ),
-];
+/** User-provided third-party Nature workflows, shipped as read-only text resources. */
+export const BUILTIN_AGENT_SKILLS: BuiltinAgentSkill[] = loadBundledNatureSkills();

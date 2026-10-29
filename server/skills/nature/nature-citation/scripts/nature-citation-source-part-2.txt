@@ -1,0 +1,633 @@
+      padding: 22px clamp(16px, 4vw, 40px) 48px;
+    }}
+    main {{
+      display: grid;
+      gap: 14px;
+      align-content: start;
+    }}
+    aside {{
+      position: sticky;
+      top: 124px;
+      align-self: start;
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 16px;
+      box-shadow: 0 2px 8px rgba(60, 64, 67, 0.12);
+    }}
+    .segment-card {{
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 18px 20px;
+      box-shadow: 0 1px 4px rgba(60, 64, 67, 0.12);
+    }}
+    .segment-head {{
+      display: flex;
+      gap: 12px;
+      align-items: start;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      margin-bottom: 10px;
+    }}
+    .segment-id {{
+      background: var(--soft);
+      color: var(--accent);
+      border-radius: 999px;
+      padding: 5px 10px;
+      font-size: 12px;
+      font-weight: 700;
+    }}
+    .query {{
+      color: var(--muted);
+      font-size: 12px;
+      max-width: 780px;
+    }}
+    .segment-text {{
+      margin: 0 0 14px;
+      font-size: 18px;
+    }}
+    .insert-row {{
+      display: grid;
+      gap: 6px;
+      margin: 12px 0 16px;
+      padding: 12px;
+      background: var(--soft);
+      border-radius: 10px;
+    }}
+    .insert-row span {{
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 700;
+    }}
+    code {{
+      white-space: normal;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 14px;
+    }}
+    .references-grid {{
+      display: grid;
+      gap: 12px;
+    }}
+    .reference {{
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 14px 16px;
+      background: #fff;
+    }}
+    .ref-topline {{
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      margin-bottom: 8px;
+      font-size: 12px;
+    }}
+    .marker {{
+      color: var(--accent);
+      font-weight: 800;
+    }}
+    .grade {{
+      color: var(--accent-2);
+      font-weight: 800;
+    }}
+    .ref-controls {{
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 10px;
+    }}
+    .check-row {{
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 13px;
+      color: var(--muted);
+    }}
+    h3 {{
+      margin: 0 0 8px;
+      font-size: 19px;
+      line-height: 1.35;
+      font-weight: 500;
+    }}
+    .meta, .authors, .empty {{
+      margin: 0 0 8px;
+      color: var(--muted);
+      font-size: 14px;
+    }}
+    .reference a {{
+      color: var(--accent);
+      overflow-wrap: anywhere;
+      font-size: 14px;
+      font-weight: 500;
+    }}
+    .abstract {{
+      margin: 8px 0 0;
+      color: #3c4043;
+      font-size: 14px;
+    }}
+    .hidden {{
+      display: none !important;
+    }}
+    .modal-overlay {{
+      position: fixed;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 14px;
+      background: rgba(20, 33, 31, 0.42);
+      backdrop-filter: blur(3px);
+      z-index: 20;
+    }}
+    .modal-overlay.is-hidden {{
+      display: none;
+    }}
+    .modal-panel {{
+      border: 1px solid var(--ink);
+      border-radius: 8px;
+      width: min(680px, calc(100vw - 28px));
+      box-shadow: 0 16px 40px rgba(60, 64, 67, 0.28);
+      background: var(--panel);
+      color: var(--ink);
+    }}
+    .modal-inner {{
+      padding: 24px;
+    }}
+    .modal-inner h2 {{
+      margin: 0 0 10px;
+      font-size: 28px;
+    }}
+    .stats {{
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+      margin: 18px 0;
+    }}
+    .stat {{
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 14px;
+      background: var(--soft-2);
+    }}
+    .stat b {{
+      display: block;
+      font-size: 30px;
+      line-height: 1;
+    }}
+    .modal-actions {{
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 16px;
+    }}
+    .modal-actions a, .modal-actions button {{
+      border: 1px solid var(--accent);
+      background: var(--accent);
+      color: #fffdf8;
+      border-radius: 20px;
+      padding: 10px 12px;
+      font: 700 14px Arial, Helvetica, sans-serif;
+      text-decoration: none;
+      cursor: pointer;
+    }}
+    .modal-actions button {{
+      background: var(--panel);
+      color: var(--accent);
+    }}
+    .selection-title {{
+      margin: 0 0 10px;
+      font-size: 16px;
+      font-weight: 700;
+    }}
+    .selection-meta {{
+      margin: 0 0 14px;
+      color: var(--muted);
+      font-size: 13px;
+    }}
+    .selection-list {{
+      display: grid;
+      gap: 10px;
+      margin-bottom: 14px;
+      max-height: 48vh;
+      overflow: auto;
+    }}
+    .selection-item {{
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 10px;
+      background: var(--soft-2);
+    }}
+    .selection-item h4 {{
+      margin: 0 0 6px;
+      font-size: 14px;
+      font-weight: 600;
+    }}
+    .selection-item p {{
+      margin: 0;
+      color: var(--muted);
+      font-size: 12px;
+    }}
+    .empty-state {{
+      color: var(--muted);
+      font-size: 14px;
+      padding: 12px;
+      border: 1px dashed var(--line);
+      border-radius: 10px;
+      background: var(--soft-2);
+    }}
+    @media (max-width: 680px) {{
+      .stats {{ grid-template-columns: 1fr; }}
+      .segment-head {{ align-items: flex-start; }}
+    }}
+    @media (max-width: 1040px) {{
+      .toolbar {{
+        grid-template-columns: 1fr;
+      }}
+      .summary-strip {{
+        justify-content: flex-start;
+      }}
+      .layout {{
+        grid-template-columns: 1fr;
+      }}
+      aside {{
+        position: static;
+      }}
+    }}
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Nature Citation Browser</h1>
+    <p class="subhead">Scholar-style browsing for strict Nature/CNS-family candidates. Filter by year, compare related hits, choose the references you actually want, then download them as ENW, RIS, or Zotero RDF.</p>
+  </header>
+  <nav class="toolbar">
+    <div class="filters">
+      <input id="queryFilter" class="search-input" type="text" placeholder="Filter by title, journal, DOI, author, or segment text">
+      <div class="filter-group">
+        <label for="yearFrom">From year</label>
+        <input id="yearFrom" type="number" min="1900" max="2100" placeholder="2019">
+        <label for="yearTo">To year</label>
+        <input id="yearTo" type="number" min="1900" max="2100" placeholder="2026">
+        <button id="applyFilters" type="button">Apply filters</button>
+        <button id="clearFilters" type="button">Clear</button>
+      </div>
+      <div class="filter-group">
+        <label class="check-row"><input id="selectedOnly" type="checkbox"> Show selected only</label>
+      </div>
+    </div>
+    <div class="summary-strip">
+      <span class="pill"><strong id="visibleCount">0</strong> visible</span>
+      <span class="pill"><strong id="selectedCount">0</strong> selected</span>
+      <span class="pill"><strong>{payload["segmentCount"]}</strong> segments</span>
+    </div>
+    <div class="summary-strip">
+      <button id="openSummary" type="button">Guide</button>
+      <label for="downloadFormat">Format</label>
+      <select id="downloadFormat">
+        <option value="enw">ENW</option>
+        <option value="ris">RIS</option>
+        <option value="zotero-rdf">Zotero RDF</option>
+      </select>
+      <a class="primary" id="downloadSelected" href="{export_link}" download="{export_file_label}">Download selected / all</a>
+    </div>
+  </nav>
+  <div class="layout">
+    <main id="results">
+      {"".join(cards)}
+    </main>
+    <aside>
+      <h2 class="selection-title">Selected references</h2>
+      <p class="selection-meta">Tick the references you want. The download button exports the selection in the chosen format. If nothing is selected, it exports all references.</p>
+      <div id="selectionList" class="selection-list"></div>
+      <div id="selectionEmpty" class="empty-state">No references selected yet.</div>
+    </aside>
+  </div>
+  <div class="modal-overlay" id="summaryModal" aria-hidden="false">
+    <div class="modal-panel" role="dialog" aria-modal="true" aria-labelledby="summaryTitle">
+      <div class="modal-inner">
+        <h2 id="summaryTitle">Ready to review citations</h2>
+        <p>This page behaves more like a compact Scholar browser: filter by year, browse related results, select the citations you trust, and download them as ENW, RIS, or Zotero RDF.</p>
+        <div class="stats">
+          <div class="stat"><b>{payload["segmentCount"]}</b><span>segments</span></div>
+          <div class="stat"><b>{payload["referenceCount"]}</b><span>unique references</span></div>
+        </div>
+        <p class="meta">Important: these are still metadata-level candidates. Selection is your decision, not an automatic validity guarantee.</p>
+        <div class="modal-actions">
+          <a href="{export_link}" download>Download original {export_label_text} file</a>
+          <button id="closeSummary" type="button" onclick="document.getElementById('summaryModal').classList.add('is-hidden'); document.getElementById('summaryModal').setAttribute('aria-hidden', 'true');">Start browsing</button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <script id="citationData" type="application/json">{payload_json}</script>
+  <script>
+    const data = JSON.parse(document.getElementById('citationData').textContent);
+    const modal = document.getElementById('summaryModal');
+    const closeSummary = document.getElementById('closeSummary');
+    const openSummary = document.getElementById('openSummary');
+    const yearFromInput = document.getElementById('yearFrom');
+    const yearToInput = document.getElementById('yearTo');
+    const queryFilterInput = document.getElementById('queryFilter');
+    const selectedOnlyInput = document.getElementById('selectedOnly');
+    const applyFiltersButton = document.getElementById('applyFilters');
+    const clearFiltersButton = document.getElementById('clearFilters');
+    const visibleCount = document.getElementById('visibleCount');
+    const selectedCount = document.getElementById('selectedCount');
+    const selectionList = document.getElementById('selectionList');
+    const selectionEmpty = document.getElementById('selectionEmpty');
+    const downloadSelected = document.getElementById('downloadSelected');
+    const downloadFormat = document.getElementById('downloadFormat');
+    const selectedMap = new Map();
+    let currentDownloadUrl = null;
+
+    downloadFormat.value = data.defaultExportFormat || 'enw';
+
+    function showModal() {{
+      if (modal) {{
+        modal.classList.remove('is-hidden');
+        modal.setAttribute('aria-hidden', 'false');
+      }}
+    }}
+    function hideModal() {{
+      if (modal) {{
+        modal.classList.add('is-hidden');
+        modal.setAttribute('aria-hidden', 'true');
+      }}
+    }}
+    window.addEventListener('DOMContentLoaded', showModal);
+    openSummary.addEventListener('click', showModal);
+    closeSummary.addEventListener('click', hideModal);
+    modal.addEventListener('click', (event) => {{
+      if (event.target === modal) {{
+        hideModal();
+      }}
+    }});
+
+    function revokeDownloadUrl() {{
+      if (currentDownloadUrl) {{
+        URL.revokeObjectURL(currentDownloadUrl);
+        currentDownloadUrl = null;
+      }}
+    }}
+
+    function selectedItems() {{
+      return Array.from(selectedMap.values());
+    }}
+
+    function exportItems() {{
+      const items = selectedItems();
+      return items.length ? items : (data.references || []);
+    }}
+
+    function buildEnw(items) {{
+      return items.map((item) => item.enw_record).join('\\n\\n');
+    }}
+
+    function buildRis(items) {{
+      return items.map((item) => item.ris_record).join('\\n\\n');
+    }}
+
+    function buildZoteroRdf(items) {{
+      const journals = new Map();
+      const articles = [];
+      for (const item of items) {{
+        if (item.zotero_rdf_article) {{
+          articles.push(item.zotero_rdf_article);
+        }}
+        if (item.journal_resource && item.zotero_rdf_journal && !journals.has(item.journal_resource)) {{
+          journals.set(item.journal_resource, item.zotero_rdf_journal);
+        }}
+      }}
+      const header = [
+        '<rdf:RDF',
+        ' xmlns:rdf="{ZOTERO_RDF_NS["rdf"]}"',
+        ' xmlns:z="{ZOTERO_RDF_NS["z"]}"',
+        ' xmlns:dcterms="{ZOTERO_RDF_NS["dcterms"]}"',
+        ' xmlns:bib="{ZOTERO_RDF_NS["bib"]}"',
+        ' xmlns:foaf="{ZOTERO_RDF_NS["foaf"]}"',
+        ' xmlns:dc="{ZOTERO_RDF_NS["dc"]}"',
+        ' xmlns:prism="{ZOTERO_RDF_NS["prism"]}"',
+        '>',
+      ].join('');
+      return [header, ...articles, ...journals.values(), '</rdf:RDF>'].join('\\n');
+    }}
+
+    function exportFileName(format, hasSelection) {{
+      const base = hasSelection ? 'selected-references' : 'all-references';
+      if (format === 'ris') return `${{base}}.ris`;
+      if (format === 'zotero-rdf') return `${{base}}.rdf`;
+      return `${{base}}.enw`;
+    }}
+
+    function updateDownloadLink() {{
+      const items = exportItems();
+      const format = downloadFormat.value || 'enw';
+      const hasSelection = selectedItems().length > 0;
+      let content = '';
+      if (format === 'ris') {{
+        content = buildRis(items);
+      }} else if (format === 'zotero-rdf') {{
+        content = buildZoteroRdf(items);
+      }} else {{
+        content = buildEnw(items);
+      }}
+      revokeDownloadUrl();
+      currentDownloadUrl = URL.createObjectURL(new Blob([content], {{ type: 'text/plain;charset=utf-8' }}));
+      downloadSelected.href = currentDownloadUrl;
+      downloadSelected.download = exportFileName(format, hasSelection);
+    }}
+
+    function updateSelectedPanel() {{
+      selectionList.innerHTML = '';
+      const items = selectedItems();
+      selectedCount.textContent = String(items.length);
+      if (!items.length) {{
+        selectionEmpty.classList.remove('hidden');
+      }} else {{
+        selectionEmpty.classList.add('hidden');
+      }}
+      for (const item of items) {{
+        const wrapper = document.createElement('div');
+        wrapper.className = 'selection-item';
+        wrapper.innerHTML = `<h4>${{item.title}}</h4><p>${{item.journal}} · ${{item.year || 'n.d.'}}</p>`;
+        selectionList.appendChild(wrapper);
+      }}
+      updateDownloadLink();
+    }}
+
+    function yearPass(year) {{
+      const fromYear = Number(yearFromInput.value || 0);
+      const toYear = Number(yearToInput.value || 0);
+      const y = Number(year || 0);
+      if (fromYear && (!y || y < fromYear)) return false;
+      if (toYear && (!y || y > toYear)) return false;
+      return true;
+    }}
+
+    function queryPass(text) {{
+      const needle = queryFilterInput.value.trim().toLowerCase();
+      if (!needle) return true;
+      return text.toLowerCase().includes(needle);
+    }}
+
+    function applyFilters() {{
+      let totalVisible = 0;
+      document.querySelectorAll('.segment-card').forEach((card) => {{
+        let visibleRefs = 0;
+        card.querySelectorAll('.reference').forEach((ref) => {{
+          const title = ref.dataset.title || '';
+          const journal = ref.dataset.journal || '';
+          const doi = ref.dataset.doi || '';
+          const authors = ref.dataset.authors || '';
+          const segmentText = ref.dataset.segment || '';
+          const year = ref.dataset.year || '';
+          const key = ref.dataset.key || '';
+          const searchText = `${{title}} ${{journal}} ${{doi}} ${{authors}} ${{segmentText}}`;
+          const matches = yearPass(year) && queryPass(searchText) && (!selectedOnlyInput.checked || selectedMap.has(key));
+          ref.classList.toggle('hidden', !matches);
+          if (matches) visibleRefs += 1;
+        }});
+        const noRefsMessage = card.querySelector('.empty');
+        if (noRefsMessage) {{
+          const matches = !selectedOnlyInput.checked && queryPass(card.dataset.segment || '');
+          noRefsMessage.classList.toggle('hidden', !matches);
+          card.classList.toggle('hidden', !matches);
+          if (matches) totalVisible += 1;
+          return;
+        }}
+        card.classList.toggle('hidden', visibleRefs === 0);
+        totalVisible += visibleRefs;
+      }});
+      visibleCount.textContent = String(totalVisible);
+    }}
+
+    document.querySelectorAll('.reference').forEach((ref) => {{
+      const checkbox = ref.querySelector('input[type="checkbox"]');
+      checkbox.addEventListener('change', () => {{
+        const key = ref.dataset.key;
+        const record = JSON.parse(ref.dataset.record);
+        if (checkbox.checked) {{
+          selectedMap.set(key, record);
+        }} else {{
+          selectedMap.delete(key);
+        }}
+        updateSelectedPanel();
+        applyFilters();
+      }});
+    }});
+
+    applyFiltersButton.addEventListener('click', applyFilters);
+    downloadFormat.addEventListener('change', updateDownloadLink);
+    clearFiltersButton.addEventListener('click', () => {{
+      yearFromInput.value = '';
+      yearToInput.value = '';
+      queryFilterInput.value = '';
+      selectedOnlyInput.checked = false;
+      applyFilters();
+    }});
+    queryFilterInput.addEventListener('input', applyFilters);
+    selectedOnlyInput.addEventListener('change', applyFilters);
+    yearFromInput.addEventListener('change', applyFilters);
+    yearToInput.addEventListener('change', applyFilters);
+    updateSelectedPanel();
+    applyFilters();
+  </script>
+</body>
+</html>
+"""
+    path.write_text(doc, encoding="utf-8")
+
+
+def parse_args(argv: list[str]) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Segment text and export strict Nature/CNS-family citations for EndNote or Zotero.")
+    parser.add_argument("--text", action="append", help="Manuscript text to segment and cite. Can be repeated.")
+    parser.add_argument("--text-file", help="UTF-8 manuscript text file.")
+    parser.add_argument("--claim", action="append", help="Single claim to treat as one segment. Can be repeated.")
+    parser.add_argument("--claim-file", help="UTF-8 text file with one claim per line.")
+    parser.add_argument("--doi", action="append", help="Known DOI to fetch and export. Can be repeated.")
+    parser.add_argument("--doi-file", help="UTF-8 text file with one DOI per line.")
+    parser.add_argument("--scope", choices=["cns", "nature", "science", "cell", "flagship"], default="cns")
+    parser.add_argument("--output-file", help="Reference output file path, typically ending in .enw, .ris, or .rdf.")
+    parser.add_argument("--outdir", help="Optional directory for outputs. If omitted, uses the output file parent or current directory.")
+    parser.add_argument("--format", choices=EXPORT_FORMAT_CHOICES, help="Reference export format: enw, ris, or zotero-rdf. Inferred from --output-file when omitted.")
+    parser.add_argument("--with-artifacts", action="store_true", help="Also generate JSON/TSV/report/HTML review artifacts.")
+    parser.add_argument("--rows", type=int, default=30, help="Crossref rows per segment before journal-scope filtering.")
+    parser.add_argument("--per-segment", type=int, default=3, help="Maximum candidates to keep per segment.")
+    parser.add_argument("--citations-per-segment", type=int, default=2, help="Markers to include in suggested insert text.")
+    parser.add_argument("--segment-chars", type=int, default=700, help="Split paragraphs longer than this many characters.")
+    parser.add_argument("--max-candidates", type=int, default=80, help="Maximum deduplicated references to export.")
+    parser.add_argument("--max-segments", type=int, help="Limit the number of segments processed in a single run.")
+    parser.add_argument("--batch-size", type=int, help="Process segments in batches of this size.")
+    parser.add_argument("--max-retries", type=int, default=2, help="Maximum retry count for Crossref requests.")
+    parser.add_argument("--from-year", type=int, help="Earliest publication year.")
+    parser.add_argument("--to-year", type=int, help="Latest publication year.")
+    parser.add_argument("--mailto", help="Email for Crossref polite pool.")
+    parser.add_argument("--sleep", type=float, default=0.3, help="Seconds between Crossref requests.")
+    return parser.parse_args(argv)
+
+
+def main(argv: list[str]) -> int:
+    args = parse_args(argv)
+    segments = build_segments(args)
+    dois = read_dois(args)
+    if not segments and not dois:
+        print("Provide --text, --text-file, --claim, --claim-file, --doi, or --doi-file.", file=sys.stderr)
+        return 2
+
+    output_path = Path(args.output_file).expanduser().resolve() if args.output_file else None
+    if args.outdir:
+        outdir = Path(args.outdir).expanduser().resolve()
+    elif output_path:
+        outdir = output_path.parent
+    else:
+        outdir = Path.cwd().resolve()
+    outdir.mkdir(parents=True, exist_ok=True)
+    args.format = normalize_export_format(args.format) if args.format else infer_export_format(output_path)
+
+    # Derive a meaningful base name from input text when no explicit output file was given
+    raw_text = read_text_inputs(args)
+    name_base = slug_from_text(raw_text) if not args.output_file else None
+
+    if output_path is None:
+        output_path = outdir / export_filename(args.format, base=name_base or "references")
+
+    segments, skipped_segments = limit_segments(segments, args.max_segments or 0)
+    mapping, references, errors = process_segment_batches(segments, args, outdir, output_path)
+    doi_candidates, doi_errors = fetch_doi_candidates(dois, args)
+    errors.extend(doi_errors)
+    references = dedupe([*references, *doi_candidates])[: args.max_candidates]
+
+    # 最终导出
+    if args.format == "enw":
+        write_enw(references, output_path)
+    elif args.format == "ris":
+        write_ris(references, output_path)
+    else:
+        write_zotero_rdf(references, output_path)
+
+    if args.with_artifacts:
+        artifact_base = outdir / name_base if name_base else outdir / "citation"
+        json_path, tsv_path, report_path, html_path = write_final_artifacts(
+            mapping,
+            references,
+            outdir,
+            output_path,
+            args,
+            errors,
+            skipped_segments=skipped_segments,
+        )
+        print(f"Artifacts: {html_path}, {tsv_path}, {json_path}, {report_path}")
+
+    print(f"Reference output: {output_path}")
+    print(f"Export format: {args.format} ({export_label(args.format)})")
+    print(f"Unique references exported: {len(references)}")
+    if skipped_segments:
+        print(f"Segments skipped: {skipped_segments}")
+    if errors and args.with_artifacts:
+        print(f"Encountered {len(errors)} retrieval error(s); see segment_reference_map.json.", file=sys.stderr)
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main(sys.argv[1:]))

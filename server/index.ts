@@ -1,4 +1,4 @@
-import { Hono } from "hono";
+import { Hono, type MiddlewareHandler } from "hono";
 import { HTTPException } from "hono/http-exception";
 import { logger } from "hono/logger";
 import { aiRoutes } from "./routes/ai";
@@ -26,10 +26,17 @@ import { agentSkillRoutes } from "./routes/agent-skills";
 import { getAiProviders } from "./services/ai";
 import { isWebSearchConfigured } from "./services/web-search";
 import type { AppEnv } from "./types";
+import { ensureDesktopAgentSkillsSchema } from "./db/client";
 
 const app = new Hono<AppEnv>();
 
 app.use("/api/*", logger());
+const upgradeDesktopSkills: MiddlewareHandler<AppEnv> = async (c, next) => {
+  await ensureDesktopAgentSkillsSchema(c.env);
+  await next();
+};
+app.use("/api/agent/*", upgradeDesktopSkills);
+app.use("/api/projects/:projectId/ai/*", upgradeDesktopSkills);
 
 // 单用户本地版:无账号、无鉴权。所有 /api/* 直接可达(无需 Bearer)。
 app.get("/api/health", (c) =>
