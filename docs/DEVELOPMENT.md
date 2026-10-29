@@ -82,7 +82,7 @@ pnpm tauri build
 
 ## Research Agent 与 Skills 接入现状
 
-**本节功能已纳入 v3.3.3 本地构建（2026-10-29），尚未上传 GitHub Releases。** Research Agent 默认内置改为 11 个 Nature 技能，取代原三个默认工作流，并保留本地技能安装管理。对话可自动选择、指定技能或不使用技能；运行边界与记录方式见 [`ARCHITECTURE.md` 的「Research Agent 与 skills」](ARCHITECTURE.md#research-agent-与-skills)。
+**本节功能已随 v3.3.3 Windows 安装包发布（2026-10-29），见 [Release](https://github.com/Fyuan0206/ArguMesh/releases/tag/v3.3.3)。** Research Agent 默认内置改为 11 个 Nature 技能，取代原三个默认工作流，并保留本地技能安装管理。对话可自动选择、指定技能或不使用技能；运行边界与记录方式见 [`ARCHITECTURE.md` 的「Research Agent 与 skills」](ARCHITECTURE.md#research-agent-与-skills)。
 
 - **管理入口**：点击左侧栏「管理技能」打开现有管理弹窗，安装与启停设置由所有项目共用；Research Agent 输入区只保留自动选择、不使用技能和指定技能。内置内容只读，可启停、不可卸载；用户技能还可卸载。已有同名用户安装优先，包括已停用的安装，不被内置版本覆盖或自动启用。
 - **安装格式**：选择单个 `SKILL.md` 或包含它的技能文件夹，预览后安装。根文件须有 YAML frontmatter，`name` 使用小写字母、数字和连字符，`description` 非空；允许附带包内文本资料。最多 64 个文本文件，每文件 64 KiB、每包 512 KiB，`SKILL.md` 正文最多 32,000 字符。同名包不能静默覆盖；内置技能仅可启停，用户技能还可卸载。二进制资料不作为可读取文本导入；脚本即使保存，也只作为文本资料，不执行。

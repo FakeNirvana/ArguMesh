@@ -81,7 +81,7 @@ ArguMesh(中文名「论脉」)是一个**本地优先、开源**的文献研究
 
 中断回合可直接重试：系统停止旧会话并从已保存的消息恢复上下文，保留失败消息与动作记录。长回合有心跳和 5 分钟超时；运行期间防止重复提交，结束会话或离开页面会取消请求，忙碌与超时提示使用中文。每轮最多执行一个白名单写入动作。
 
-**Skills（已纳入 v3.3.3 本地构建）**：点击左侧栏「管理技能」打开技能管理弹窗，查看、启停及安装技能；Research Agent 输入区保留「自动选择」「不使用技能」或某个已启用技能的选择。默认内置改为 **11 个 Nature 科研技能**，覆盖文献检索、引用核验、数据可用性、科研绘图、论文转专利、论文汇报 PPT、润色、双语阅读、审稿回复、模拟审稿与论文写作，取代原先三个默认工作流。内置内容可查看、启停，不可卸载；已有同名用户安装及其停用状态优先保留，不被内置版本覆盖。也可导入本地 `SKILL.md` 或技能文件夹，预览后安装，用户安装的技能可卸载。技能在本机保存，所有项目共用，无需额外账号。
+**Skills（v3.3.3）**：点击左侧栏「管理技能」打开技能管理弹窗，查看、启停及安装技能；Research Agent 输入区保留「自动选择」「不使用技能」或某个已启用技能的选择。默认内置改为 **11 个 Nature 科研技能**，覆盖文献检索、引用核验、数据可用性、科研绘图、论文转专利、论文汇报 PPT、润色、双语阅读、审稿回复、模拟审稿与论文写作，取代原先三个默认工作流。内置内容可查看、启停，不可卸载；已有同名用户安装及其停用状态优先保留，不被内置版本覆盖。也可导入本地 `SKILL.md` 或技能文件夹，预览后安装，用户安装的技能可卸载。技能在本机保存，所有项目共用，无需额外账号。
 
 Nature 技能提供文本工作流与参考资料；Python / R / MCP、图表渲染及 PPTX / DOCX 文件生成等执行能力尚未接入。原包的二进制图集不在内置文本包中，部分共享资料缺失已标注；Agent 可依据实际提供的内容分析和起草，不会因加载技能就具备其全部工具能力。
 
@@ -89,7 +89,7 @@ Nature 技能提供文本工作流与参考资料；Python / R / MCP、图表渲
 
 ### 文献库
 
-上传 PDF 的文件名与文件本体保存在用户数据目录的本地数据库，重启或覆盖更新后可继续阅读。旧记录即使缺少文件名，只要 PDF 仍在数据库中，也会恢复「阅读」入口；阅读器保存失败会明确提示。此修复无需数据库迁移，已入库附件无需重新导入；仅存于旧浏览器缓存且未写入数据库的文件仍需重新选择一次。修复已纳入 v3.3.3 本地构建，尚未上传 GitHub Releases。
+上传 PDF 的文件名与文件本体保存在用户数据目录的本地数据库，重启或覆盖更新后可继续阅读。旧记录即使缺少文件名，只要 PDF 仍在数据库中，也会恢复「阅读」入口；阅读器保存失败会明确提示。此修复无需数据库迁移，已入库附件无需重新导入；仅存于旧浏览器缓存且未写入数据库的文件仍需重新选择一次。修复已随 v3.3.3 Windows 安装包发布。
 按 DOI / arXiv / URL 导入文献(自动获取元数据),或批量上传 PDF(单文件 ≤ 25 MB)。支持阅读状态(待读 → 粗读 → 精读 → 已复现 → 核心文献)、收藏、标签与项目内笔记。列表可多选后**批量删除**(与单行删除相同:确认后永久移除 PDF、证据与关联知识,跨项目一并清理)。
 
 **文件夹同步(`literature/` 收件箱)** — 若项目已绑定本地工作文件夹(`workspacePath`),可将 PDF 放入固定子目录,在文献库一键导入:
@@ -179,16 +179,16 @@ API:`POST /api/projects/:projectId/library/scan-inbox`(需已设置 `workspacePa
 
 ## 下载安装
 
-**v3.3.3 本地构建（2026-10-29）**：Windows x64 安装包包含 Nature 技能、Paper Card 对照填写、阅读器双栏对齐与 PDF 重启持久化修复；尚未上传 GitHub Releases，本轮未构建新版 Mac DMG。桌面覆盖升级会事务性补齐 `0015_agent_skills`，保留已有项目、消息与 AI 配置。新安装仍为空库，不带用户数据或 AI 密钥；安装包未签名，应用无鉴权、仅监听本机。构建方法见 [部署说明](docs/DEPLOYMENT.md)。
+**v3.3.3 已发布（2026-10-29）**：[Windows x64 安装包与更新说明](https://github.com/Fyuan0206/ArguMesh/releases/tag/v3.3.3)已上线，另附 [SHA-256 校验文件](https://github.com/Fyuan0206/ArguMesh/releases/download/v3.3.3/ArguMesh_3.3.3_x64-setup.exe.sha256)。本版包含 Nature 技能、Paper Card 对照填写、阅读器双栏对齐与 PDF 重启持久化修复；Mac 最新安装包仍为 v3.3.2，本轮未构建新版 DMG。桌面覆盖升级会事务性补齐 `0015_agent_skills`，保留已有项目、消息与 AI 配置。新安装仍为空库，不带用户数据或 AI 密钥；安装包未签名，应用无鉴权、仅监听本机。构建方法见 [部署说明](docs/DEPLOYMENT.md)。
 
-3.3.2 已发布 Windows x64 EXE 与 Apple Silicon Mac DMG，安装包及 SHA-256 校验文件见 [v3.3.2 Release](https://github.com/Fyuan0206/ArguMesh/releases/tag/v3.3.2)。
+下表按平台提供当前安装包；Apple Silicon Mac 及其校验文件见 [v3.3.2 Release](https://github.com/Fyuan0206/ArguMesh/releases/tag/v3.3.2)。
 
 | 文件 | 适用 |
 | --- | --- |
-| [`ArguMesh_3.3.2_x64-setup.exe`](https://github.com/Fyuan0206/ArguMesh/releases/download/v3.3.2/ArguMesh_3.3.2_x64-setup.exe) | Windows 10/11 x64，`currentUser` 安装，**不需要管理员权限** |
+| [`ArguMesh_3.3.3_x64-setup.exe`](https://github.com/Fyuan0206/ArguMesh/releases/download/v3.3.3/ArguMesh_3.3.3_x64-setup.exe) | Windows 10/11 x64，`currentUser` 安装，**不需要管理员权限** |
 | [`ArguMesh_3.3.2_aarch64.dmg`](https://github.com/Fyuan0206/ArguMesh/releases/download/v3.3.2/ArguMesh_3.3.2_aarch64.dmg) | macOS Apple Silicon（M 系列）；不适用于 Intel Mac |
 
-**3.3.2 安装说明：** 关闭 ArguMesh 后覆盖安装；已有数据库与已保存的 AI 配置不会被安装器覆盖。升级前请导出工作区备份。桌面版启动时查询 GitHub 最新正式版，提供可关闭的下载提醒；也可在 **设置 → 应用更新 → 检查更新** 手动检查。检查不发送研究内容，网络失败不影响使用。v3.2.5 没有应用内检查功能，请先手动更新一次。新版内置独立 Node / Python / MinerU 与 Windows 所需 C++ 运行库；首次精确翻译自动下载约 2.5 GB 的解析模型，可取消与重试，升级后复用。
+**Windows v3.3.3 安装说明：** 关闭 ArguMesh 后覆盖安装；已有数据库与已保存的 AI 配置不会被安装器覆盖。升级前请导出工作区备份。桌面版启动时查询 GitHub 最新正式版，提供可关闭的下载提醒；也可在 **设置 → 应用更新 → 检查更新** 手动检查。检查不发送研究内容，网络失败不影响使用。v3.2.5 没有应用内检查功能，请先手动更新一次。新版内置独立 Node / Python / MinerU 与 Windows 所需 C++ 运行库；首次精确翻译自动下载约 2.5 GB 的解析模型，可取消与重试，升级后复用。
 
 **共享数据已知限制：** 同时打开网页端与客户端可能互相覆盖工作区修改；已有共享文件可能替换浏览器独有的 Paper Card，请先导出备份并一次只使用一个入口。源码旧库 `./data/argumesh.db` 不会自动迁移到用户目录；迁移前请显式设置 `DATABASE_URL=file:./data/argumesh.db`。
 
@@ -212,7 +212,7 @@ API:`POST /api/projects/:projectId/library/scan-inbox`(需已设置 `workspacePa
 
 ### 不用 Windows?
 
-**Apple Silicon Mac** 下载 Release 中的 `.dmg`，打开后将 `ArguMesh.app` 拖入 Applications，再从应用程序目录启动。Mac 包内含独立 Node、Python 与 MinerU；首次精确解析仍需下载模型。数据存放在 `~/Library/Application Support/ArguMesh`，包括数据库、工作区文件及阅读缓存（OCR 文本与译文）；重启换端口后可继续读取。Mac 包未进行 Apple 开发者签名或公证，首次启动需在 macOS 中手动确认。新 DMG 的内部应用与服务版本均已核验为 3.3.2，归档完整性检查通过，模板库无业务数据；本次任务未在 Mac 实机启动验证。源码构建步骤见 [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) 第 3 节。
+**Apple Silicon Mac** 下载 [v3.3.2 Release](https://github.com/Fyuan0206/ArguMesh/releases/tag/v3.3.2) 中的 `.dmg`，打开后将 `ArguMesh.app` 拖入 Applications，再从应用程序目录启动。Mac 包内含独立 Node、Python 与 MinerU；首次精确解析仍需下载模型。数据存放在 `~/Library/Application Support/ArguMesh`，包括数据库、工作区文件及阅读缓存（OCR 文本与译文）；重启换端口后可继续读取。Mac 包未进行 Apple 开发者签名或公证，首次启动需在 macOS 中手动确认。该 v3.3.2 DMG 的内部应用与服务版本均已核验为 3.3.2，归档完整性检查通过，模板库无业务数据；本次任务未在 Mac 实机启动验证。源码构建步骤见 [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) 第 3 节。
 
 DMG 中只有一份 `ArguMesh.app`；安装时将它拖入“应用程序”并覆盖旧版。名称带 `previous`、`pre-cache` 或 `before` 的 `.app` 是旧版备份，可移入废纸篓；用户数据保存在上述 Application Support 目录，不在应用包内。
 

@@ -8,6 +8,15 @@ ArguMesh（论脉）的版本历史。README 只保留指向本文件的入口�
 
 ---
 
+## Release (2026-10-29) — v3.3.3 Windows desktop installer
+
+- Published [v3.3.3](https://github.com/Fyuan0206/ArguMesh/releases/tag/v3.3.3) as the latest stable release, with the verified Windows x64 installer and its SHA-256 file. The installer is 223,546,607 bytes (213.2 MiB); SHA-256: `9d80bf60c76ad8d5096806670efb49088bb5c20248db6c6ed95f47ddcdf3ca19`. The tag points to build commit `51bd4e3`; release documentation is synchronized afterward.
+- Fresh installations contain an empty database and no user AI configuration. The installer is unsigned; the app has no authentication and listens only on loopback. Existing desktop databases receive the additive `0015_agent_skills` upgrade without replacing projects, messages or saved AI settings. Validation results and limitations are recorded in the build entry below.
+- This release includes Windows only. The latest Apple Silicon Mac DMG remains v3.3.2; its existing download is retained separately in both READMEs.
+- 将 [v3.3.3](https://github.com/Fyuan0206/ArguMesh/releases/tag/v3.3.3) 发布为最新正式版本，附已验收的 Windows x64 安装包和 SHA-256 文件。安装包 223,546,607 字节（213.2 MiB），SHA-256 为 `9d80bf60c76ad8d5096806670efb49088bb5c20248db6c6ed95f47ddcdf3ca19`；标签指向构建提交 `51bd4e3`，发布后同步文档。
+- 新安装为空库，不带用户 AI 配置；安装包未签名，应用无鉴权且仅监听本机。已有桌面数据库增量补齐 `0015_agent_skills`，不替换项目、消息或保存的 AI 配置；构建验证与已知范围见下方条目。
+- 本次仅发布 Windows，Apple Silicon Mac 最新 DMG 仍为 v3.3.2；两份 README 分开保留对应平台下载链接。
+
 ## v3.3.3 (2026-10-29) — Local Windows desktop build
 
 - Bump package, Tauri and Cargo versions to 3.3.3. Prepare a local Windows x64 installer with the current reader alignment, PDF persistence, Paper Card comparison and eleven bundled Nature text workflows. No GitHub Release or new Mac DMG is published by this packaging task.

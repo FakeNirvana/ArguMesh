@@ -79,7 +79,7 @@ wrangler deploy --config <打印出的路径>   # 用已认证的 Wrangler CLI �
 
 ## 3. 桌面安装包（Tauri 2 + Node sidecar）
 
-> **v3.3.3 本地 Windows 构建（2026-10-29）**：包含 11 个 Nature 技能与最新阅读器修复，产物为 `src-tauri/target/release/bundle/nsis/ArguMesh_3.3.3_x64-setup.exe`，另附 SHA-256 文件。尚未上传 GitHub Releases，本轮未构建 Mac DMG。桌面技能与 Agent 对话 API 首次请求前，在事务中复用 `0015_agent_skills` 的增量迁移，保留旧库及 AI 配置；新安装仍使用空库。
+> **v3.3.3 Windows 已发布（2026-10-29）**：[Windows x64 安装包与 SHA-256 文件](https://github.com/Fyuan0206/ArguMesh/releases/tag/v3.3.3)已上线，包含 11 个 Nature 技能与最新阅读器修复。本地产物为 `src-tauri/target/release/bundle/nsis/ArguMesh_3.3.3_x64-setup.exe`。本轮未构建 Mac DMG，Mac 继续使用 v3.3.2。桌面技能与 Agent 对话 API 首次请求前，在事务中复用 `0015_agent_skills` 的增量迁移，保留旧库及 AI 配置；新安装仍使用空库。
 
 > **3.3.2 已发布**：Windows x64 EXE 与 Apple Silicon Mac DMG，附 SHA-256 校验文件，见 [v3.3.2 Release](https://github.com/Fyuan0206/ArguMesh/releases/tag/v3.3.2)。关闭应用后覆盖安装；安装器保留已有数据库与 AI 配置，新安装使用空库。升级前导出工作区备份；共享工作区并发覆盖及旧状态迁移限制见 README。v3.3.0 起桌面版启动时会提示更新，设置页也可手动检查；v3.2.5 用户需手动升级一次。首次精确翻译自动下载解析模型，可取消与重试，升级后复用。新 Mac 包内部应用与服务版本均为 3.3.2；归档和空模板库核验通过，本次未实机启动。
 
