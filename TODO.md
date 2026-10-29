@@ -12,7 +12,7 @@ ArguMesh 的当前进度、明确**不要开工**的项、已知欠账，以及 
 - **已发布能力**：项目工作区、文献库（含 `literature/` 文件夹同步）、PDF 阅读器（OCR / 划词气泡 / 页内高亮 / 双语对照）、AI Paper Card、证据矩阵、研究脉络（洞见 + 研究问题）、实验工作台、LaTeX 写作、常驻 Research Agent（Pi `AgentSession`）、全局搜索、任务中心。
 - **Skills（源码新增，尚未发布安装包）**：Research Agent 支持三个内置科研技能、本地 `SKILL.md` / 技能文件夹预览安装、启停与用户技能卸载；对话可自动选择、指定技能或不使用技能。`skill_load` / `skill_read` 只访问本轮允许的技能及包内文本，使用记录保留内容快照与版本；不再沿用 Pi 的本机技能/扩展自动扫描，不执行通用脚本。`0015_agent_skills` 为增量迁移，新增 `agent_skills` 及消息技能快照/选择列。详见[开发指南](docs/DEVELOPMENT.md#research-agent-与-skills-接入现状)与[架构文档](docs/ARCHITECTURE.md#research-agent-与-skills)。
 - **阶段计划**：`ARGUMESH-RESEARCH-WORKBENCH-PLAN.md` 的第 0 节记录了 2026-08-26 的实施状态，其中列出的导航收敛、研究脉络、实验工作台、Research Agent、LaTeX 写作均已完成。
-- **分发**：`v3.2.5` 已发布到 [GitHub Releases](https://github.com/Fyuan0206/ArguMesh/releases/tag/v3.2.5)，附带 Windows NSIS 安装包 `ArguMesh_3.2.5_x64-setup.exe`（2026-09-24，用户重新提出后手动发布）。安装包**未签名**、**不带数据库和 AI 配置**，这三条事实同时写在 release notes、`README` / `README.zh-CN.md` 的「下载安装」章节与 `CHANGELOG.md` 里。后续版本的发布是手工三步：提交 → 打 tag → `gh release create` 附带新构建的安装包。
+- **分发**：`v3.2.5` 已发布到 [GitHub Releases](https://github.com/Fyuan0206/ArguMesh/releases/tag/v3.2.5)，附带 Windows NSIS 安装包 `ArguMesh_3.2.5_x64-setup.exe`（2026-09-24，用户重新提出后手动发布）。安装包**未签名**、**不带数据库和 AI 配置**，这三条事实同时写在 release notes、`README.md` / `README.en.md` 的「下载安装」章节与 `CHANGELOG.md` 里。后续版本的发布是手工三步：提交 → 打 tag → `gh release create` 附带新构建的安装包。
 
 ## ⛔ 已暂缓 —— 不要开工
 

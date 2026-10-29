@@ -20,6 +20,11 @@
   <a href="https://github.com/Fyuan0206/ArguMesh/issues/4">View the group QR code</a>
 </p>
 
+<p align="center">
+  🌐 <strong>Official website:</strong>
+  <a href="https://argumesh.nekocfy.com/">argumesh.nekocfy.com</a>
+</p>
+
 ArguMesh (Chinese name 「论脉」) is a **local-first, open-source research workbench** for researchers, graduate students, and paper authors. It connects literature, evidence, research questions, experiments and writing in one traceable workflow.
 
 Stop shuffling information between PDF readers, spreadsheets, note apps, and chat AI.

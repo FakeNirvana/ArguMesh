@@ -20,6 +20,11 @@
   <a href="https://github.com/Fyuan0206/ArguMesh/issues/4">点击查看群二维码</a>
 </p>
 
+<p align="center">
+  🌐 <strong>官网：</strong>
+  <a href="https://argumesh.nekocfy.com/">argumesh.nekocfy.com</a>
+</p>
+
 ArguMesh(中文名「论脉」)是一个**本地优先、开源**的文献研究工作台,面向科研人员、研究生和论文作者。从文献到论文写作，让每一步都有证据可追溯。
 
 减少在 PDF 阅读器、表格、笔记软件和聊天式 AI 之间反复搬运信息。
@@ -270,7 +275,7 @@ AI_PROVIDERS=[{"id":"stepfun","label":"StepFun","baseUrl":"https://api.stepfun.c
 这是一个本地优先的 Node.js + SQLite 应用。不要引入 Cloudflare Workers、wrangler 或 Turso。
 
 1. 前置条件:Node.js ≥ 20。若没有 pnpm,先执行 `corepack enable`。
-2. 阅读仓库根目录的 CLAUDE.md、README.zh-CN.md(或 README.md)和 .env.example。
+2. 阅读仓库根目录的 CLAUDE.md、README.md 和 .env.example。
 3. 在仓库根目录执行 `pnpm install`。
 4. `.env` 可选。不要编造或提交 API Key。仅当用户要自定义 DATABASE_URL 或 AI 服务时,才从 `.env.example` 复制为 `.env`。
 5. 执行 `pnpm run db:seed`(可重复运行:建表 + 演示项目,无账号)。

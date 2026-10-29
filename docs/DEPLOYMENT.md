@@ -44,7 +44,7 @@ pnpm start          # http://127.0.0.1:8787
   - `/` 与 `/website-assets/*` → 从 `ASSETS` 绑定取静态资源
   - **其他全部请求通过 service binding 转发给 `paperidea-workbench`**（prototype 的那个 Worker）——鉴权、`/api/*`、深链接都继续由它处理
 - 官网持有更具体的 zone route `argumesh.nekocfy.com/*`；prototype 保留自定义域名。
-- 页面上的「文档」与「GitHub」都指向 **<https://github.com/Fyuan0206/ArguMesh>**（「文档」具体落到 `README.zh-CN.md`）。改官网外链时不要指向别的仓库或分支。
+- 页面上的「文档」与「GitHub」都指向 **<https://github.com/Fyuan0206/ArguMesh>**（「文档」具体落到 `README.md`）。改官网外链时不要指向别的仓库或分支。
 
 ### 部署
 

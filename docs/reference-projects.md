@@ -128,4 +128,4 @@
 
 - 未 vendoring 上述仓库源码；仅在本文件保留链接与摘要。小绿鲸为商业产品，无开源仓库。
 - 若需离线阅读 ARIS 中文 README，可 clone 后查看仓库根目录 `README_CN.md`；Open Science 见 `README.zh.md`。
-- 更新本索引时：补充「可借鉴点」与 ArguMesh 差异，并在 `README.md` / `README.zh-CN.md` 的参考项目小节加一行链接（若有对外暴露需求）。
+- 更新本索引时：补充「可借鉴点」与 ArguMesh 差异，并在 `README.md` / `README.en.md` 的参考项目小节加一行链接（若有对外暴露需求）。

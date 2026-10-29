@@ -8,10 +8,10 @@ ArguMesh（论脉）的版本历史。README 只保留指向本文件的入口�
 
 ---
 
-## Docs (2026-10-29) — WeChat community issue
+## Docs (2026-10-29) — Community links and README languages
 
-- Added a centered WeChat community link near the top of all three READMEs and moved QR-code display and expiry notices to [community issue #4](https://github.com/Fyuan0206/ArguMesh/issues/4). Replaced the QR image with the supplied original, valid before November 5, 2026. No database migration.
-- 三份 README 顶部新增居中的微信交流群入口，群二维码展示与有效期统一移至[交流群 Issue #4](https://github.com/Fyuan0206/ArguMesh/issues/4)；二维码更新为用户提供的原图，按微信提示于 2026 年 11 月 5 日前有效。无需数据库迁移。
+- Added centered links to the WeChat community and [official website](https://argumesh.nekocfy.com/) near the top of both READMEs, and moved QR-code display and expiry notices to [community issue #4](https://github.com/Fyuan0206/ArguMesh/issues/4). Replaced the QR image with the supplied original, valid before November 5, 2026. Kept `README.md` for Chinese and `README.en.md` for English, removed the duplicate `README.zh-CN.md`, and updated contributor documentation rules. No database migration.
+- 中英文 README 顶部新增居中的微信交流群与[官网](https://argumesh.nekocfy.com/)入口，群二维码展示与有效期统一移至[交流群 Issue #4](https://github.com/Fyuan0206/ArguMesh/issues/4)；二维码更新为用户提供的原图，按微信提示于 2026 年 11 月 5 日前有效。中文只保留 `README.md`，英文保留 `README.en.md`，移除重复的 `README.zh-CN.md` 并同步更新协作文档规则。无需数据库迁移。
 
 ## Unreleased (2026-10-23) — Reader pane alignment and shared controls
 
