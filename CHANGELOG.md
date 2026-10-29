@@ -8,6 +8,11 @@ ArguMesh（论脉）的版本历史。README 只保留指向本文件的入口�
 
 ---
 
+## Docs (2026-10-29) — WeChat community issue
+
+- Added a centered WeChat community link near the top of all three READMEs and moved QR-code display and expiry notices to [community issue #4](https://github.com/Fyuan0206/ArguMesh/issues/4). Replaced the QR image with the supplied original, valid before November 5, 2026. No database migration.
+- 三份 README 顶部新增居中的微信交流群入口，群二维码展示与有效期统一移至[交流群 Issue #4](https://github.com/Fyuan0206/ArguMesh/issues/4)；二维码更新为用户提供的原图，按微信提示于 2026 年 11 月 5 日前有效。无需数据库迁移。
+
 ## Unreleased (2026-10-23) — Reader pane alignment and shared controls
 
 - Moved translation actions, view tabs and navigation into a shared top toolbar, with progress and fallback notices above both panes. Matched page origins and margins, fitted both pages to the narrower pane and preserved manual zoom on height-only changes. Linked scrolling now follows both horizontal and page-relative vertical position, including the first page's leading margin; independent scrolling remains available. No database migration or new installer release.

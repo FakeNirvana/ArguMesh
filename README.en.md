@@ -15,6 +15,11 @@
 </p>
 
 
+<p align="center">
+  💬 <strong>WeChat community:</strong>
+  <a href="https://github.com/Fyuan0206/ArguMesh/issues/4">View the group QR code</a>
+</p>
+
 ArguMesh (Chinese name 「论脉」) is a **local-first, open-source research workbench** for researchers, graduate students, and paper authors. It connects literature, evidence, research questions, experiments and writing in one traceable workflow.
 
 Stop shuffling information between PDF readers, spreadsheets, note apps, and chat AI.
@@ -347,13 +352,11 @@ API tests call the Hono app directly with a fresh temporary SQLite database per 
 
 ## Community
 
-Join the WeChat group **ArguMesh | AI学术工具** to discuss the product, report issues, and share research workflows. Scan with WeChat:
+Join the WeChat group **ArguMesh | AI学术工具** to discuss the product, report issues, and share research workflows.
 
-<p align="center">
-  <img src="./docs/wechat-group.png" alt="WeChat group QR — ArguMesh | AI学术工具" width="280" />
-</p>
+💬 **[View the group QR code](https://github.com/Fyuan0206/ArguMesh/issues/4)**
 
-> Updated October 7, 2026. WeChat indicates this QR code is valid before October 14, 2026. If it expires, open an issue or check the latest README update.
+The latest QR code and validity window are maintained in that issue. If the code expires or the group is full, leave a comment there.
 
 ## Reference projects
 

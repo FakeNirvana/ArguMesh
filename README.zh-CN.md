@@ -15,6 +15,11 @@
 </p>
 
 
+<p align="center">
+  💬 <strong>微信交流群：</strong>
+  <a href="https://github.com/Fyuan0206/ArguMesh/issues/4">点击查看群二维码</a>
+</p>
+
 ArguMesh(中文名「论脉」)是一个**本地优先、开源**的文献研究工作台,面向科研人员、研究生和论文作者。从文献到论文写作，让每一步都有证据可追溯。
 
 减少在 PDF 阅读器、表格、笔记软件和聊天式 AI 之间反复搬运信息。
@@ -360,13 +365,11 @@ API 测试直连 Hono 应用并为每个测试文件创建独立的临时 SQLite
 
 ## 交流群
 
-欢迎加入微信群 **ArguMesh | AI学术工具**,讨论产品使用、提需求 / 报 bug、交流研究工作流。请用微信扫码加入:
+欢迎加入微信群 **ArguMesh | AI学术工具**，讨论产品使用、提需求 / 报 bug、交流研究工作流。
 
-<p align="center">
-  <img src="./docs/wechat-group.png" alt="微信交流群二维码 — ArguMesh | AI学术工具" width="280" />
-</p>
+💬 **[点击查看群二维码](https://github.com/Fyuan0206/ArguMesh/issues/4)**
 
-> 二维码更新于 2026 年 10 月 7 日，按微信提示于 10 月 14 日前有效。若二维码过期，请开 Issue 或查看 README 的最新更新。
+最新二维码与有效期统一在该 Issue 更新；若二维码过期或群满，请在该 Issue 下留言。
 
 ## 参考项目
 
